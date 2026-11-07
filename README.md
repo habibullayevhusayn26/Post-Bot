@@ -37,6 +37,8 @@ Yangi kod deploy bo‘lgach botga `/start` yuboring: asosiy menyuda **Postlar Mi
 
 Bot va Mini App faqat o‘zbek tilida ishlaydi; til tanlash funksiyasi mavjud emas.
 
+Bot xabarlari va klaviatura tugmalarida Telegram premium custom emoji’lar ishlatiladi. Telegram chat yoki bot uchun bu emoji’larni qabul qilmasa, xabar odatiy emoji bilan yuboriladi. Rasmiy talabga ko‘ra bot qo‘shimcha username’ni Fragment’dan sotib olgan bo‘lishi yoki bot egasi Premium obunaga ega bo‘lib bot private, group yoki supergroup chatiga yuborishi kerak.
+
 Asosiy menyudagi **Post yaratish** tugmasi post yuboriladigan kanalni tanlaydi. **Kanallarim** kanal qo‘shish, kanallarni boshqarish yoki o‘chirish uchun ishlatiladi. Admin menyusi va `/admin` buyrug‘i faqat bot adminiga ko‘rinadi.
 
 Ma’lumotlar `data.json` faylida saqlanadi. Tokenni HTML, Git yoki frontend kodiga yozmang. Siz yuborgan token chatga oshkor bo‘lganligi sababli BotFather’da `/revoke` orqali uni yangilang.

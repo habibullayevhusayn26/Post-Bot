@@ -95,6 +95,11 @@ const fs = require('node:fs');
 const { spawn } = require('node:child_process');
 const { Telegraf, Markup, session } = require('telegraf');
 const { verifyTelegramInitData } = require('./mini-app-auth');
+const {
+  decorateTelegramPayload,
+  isCustomEmojiError,
+  removePremiumEmoji
+} = require('./premium-emojis');
 
 const token = process.env.BOT_TOKEN;
 if (!token) {
@@ -102,6 +107,22 @@ if (!token) {
 }
 
 const bot = new Telegraf(token);
+const originalTelegramCallApi = bot.telegram.callApi.bind(bot.telegram);
+bot.telegram.callApi = async (method, payload, options) => {
+  const decoratedPayload = decorateTelegramPayload(method, payload);
+  try {
+    return await originalTelegramCallApi(method, decoratedPayload, options);
+  } catch (error) {
+    if (!isCustomEmojiError(error)) throw error;
+    const fallbackPayload = removePremiumEmoji(decoratedPayload);
+    if (!fallbackPayload) throw error;
+    console.warn(
+      'Telegram custom emoji are unavailable for this message; retrying with standard emoji.',
+      error.response?.description || error.message
+    );
+    return originalTelegramCallApi(method, fallbackPayload, options);
+  }
+};
 const BOT_TIMEZONE = 'Asia/Tashkent';
 
 async function safeAnswerCbQuery(ctx) {

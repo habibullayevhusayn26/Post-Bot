@@ -95,7 +95,7 @@ function getButtonStyle(value) {
   if (matches(['bekor', 'o‘chir', "o'chir", 'rad et', 'rad qil', 'delete', 'remove', 'reject'])) {
     return 'danger';
   }
-  if (matches(['tasdiq', 'muvaffaqiyat', 'yubor', 'jo‘nat', "jo'nat", 'publish', 'send', 'qo‘sh', "qo'sh", 'approve', 'confirm', 'saqla'])) {
+  if (matches(['premium', 'post yarat', 'tasdiq', 'muvaffaqiyat', 'yubor', 'jo‘nat', "jo'nat", 'publish', 'send', 'qo‘sh', "qo'sh", 'approve', 'confirm', 'saqla'])) {
     return 'success';
   }
   return 'primary';

@@ -25,17 +25,35 @@ test('chooses a matching emoji for Uzbek labels and falls back to a message emoj
 test('adds premium emoji icons and Telegram button colors to inline and reply keyboards', () => {
   const decorated = decorateReplyMarkup({
     inline_keyboard: [[{ text: 'Postni tasdiqlash', callback_data: 'publish' }]],
-    keyboard: [['Profilim', { text: 'Mini App', web_app: { url: 'https://example.com' } }]]
+    keyboard: [[
+      '✍️ Post yaratish',
+      '📢 Kanallarim',
+      '📊 Post statistikasi',
+      '👤 Profilim',
+      '💎 Premium',
+      '❓ Yordam',
+      '⚙️ Sozlamalar'
+    ]]
   });
 
   assert.equal(decorated.inline_keyboard[0][0].text, 'Postni tasdiqlash');
   assert.equal(decorated.inline_keyboard[0][0].icon_custom_emoji_id, EMOJIS.done.id);
   assert.equal(decorated.inline_keyboard[0][0].style, 'success');
-  assert.equal(decorated.keyboard[0][0].text, 'Profilim');
-  assert.equal(decorated.keyboard[0][0].icon_custom_emoji_id, EMOJIS.user.id);
-  assert.equal(decorated.keyboard[0][0].style, 'primary');
-  assert.equal(decorated.keyboard[0][1].icon_custom_emoji_id, EMOJIS.message.id);
+  assert.equal(decorated.keyboard[0][0].text, 'Post yaratish');
+  assert.equal(decorated.keyboard[0][0].icon_custom_emoji_id, EMOJIS.write.id);
+  assert.equal(decorated.keyboard[0][0].style, 'success');
+  assert.equal(decorated.keyboard[0][1].icon_custom_emoji_id, EMOJIS.announce.id);
   assert.equal(decorated.keyboard[0][1].style, 'primary');
+  assert.equal(decorated.keyboard[0][2].icon_custom_emoji_id, EMOJIS.stats.id);
+  assert.equal(decorated.keyboard[0][2].style, 'primary');
+  assert.equal(decorated.keyboard[0][3].icon_custom_emoji_id, EMOJIS.user.id);
+  assert.equal(decorated.keyboard[0][3].style, 'primary');
+  assert.equal(decorated.keyboard[0][4].icon_custom_emoji_id, EMOJIS.premium.id);
+  assert.equal(decorated.keyboard[0][4].style, 'success');
+  assert.equal(decorated.keyboard[0][5].icon_custom_emoji_id, EMOJIS.help.id);
+  assert.equal(decorated.keyboard[0][5].style, 'primary');
+  assert.equal(decorated.keyboard[0][6].icon_custom_emoji_id, EMOJIS.settings.id);
+  assert.equal(decorated.keyboard[0][6].style, 'primary');
 });
 
 test('maps destructive and user-selected button colors to Telegram styles', () => {

@@ -95,6 +95,9 @@ const fs = require('node:fs');
 const { spawn } = require('node:child_process');
 const { Telegraf, Markup, session } = require('telegraf');
 const { verifyTelegramInitData } = require('./mini-app-auth');
+const { findPostableChannel } = require('./channel-access');
+const { buildMiniAppStatistics } = require('./mini-app-data');
+const { parseMediaUrl } = require('./media-url');
 const {
   decorateTelegramPayload,
   isCustomEmojiError,
@@ -422,18 +425,20 @@ function isAdmin(ctx) {
 }
 
 function mainKeyboard(ctx) {
-  const keyboard = [
+  const keyboard = [];
+  if (webAppUrl) keyboard.push([Markup.button.webApp('Mini App', webAppUrl)]);
+  keyboard.push(
     [tr(ctx, 'createPost'), tr(ctx, 'channels')],
     ['Post statistikasi', tr(ctx, 'profile')],
-    ['Premium', 'Yordam']
-  ];
+    ['Premium', 'Yordam'],
+    ['Video saqlash', 'Sozlamalar']
+  );
   if (isAdmin(ctx)) keyboard.push([tr(ctx, 'admin')]);
-  if (webAppUrl) keyboard.unshift([Markup.button.webApp('Postlar Mini App', webAppUrl)]);
   return Markup.keyboard(keyboard).resize();
 }
 
-function miniAppKeyboard() {
-  return Markup.keyboard([[Markup.button.webApp('Postlar Mini App', webAppUrl)]]).resize();
+function miniAppKeyboard(ctx) {
+  return mainKeyboard(ctx);
 }
 
 function adminKeyboard(ctx) {
@@ -880,7 +885,7 @@ async function handleStart(ctx) {
   await User.updateOne({ telegramId: Number(ctx.from.id) }, { $set: { language: 'uz' } });
   saveData();
   reset(ctx);
-  if (!(await requiredSubscription(ctx))) return;
+  await requiredSubscription(ctx);
   return ctx.reply('Assalomu alaykum! Kanal postlarini boshqarish botiga xush kelibsiz.', {
     parse_mode: 'HTML',
     reply_markup: mainKeyboard(ctx)
@@ -964,34 +969,8 @@ function premiumStatsText(ctx) {
     `Oxirgi post: ${lastPublished}`;
 }
 
-async function checkFullAdmin(ctx, username) {
-  const chat = await ctx.telegram.getChat(username);
-  if (chat.type !== 'channel') throw new Error('Bu username kanalga tegishli emas.');
-
-  try {
-    const userMember = await ctx.telegram.getChatMember(chat.id, ctx.from.id);
-    if (!['creator', 'administrator'].includes(userMember.status)) {
-      throw new Error('Kanalni qo\'shish uchun kanalda admin yoki ega bo\'lishingiz kerak.');
-    }
-  } catch (error) {
-    throw new Error('Kanalni qo\'shish uchun kanalda admin yoki ega bo\'lishingiz kerak.');
-  }
-
-  const botInfo = await ctx.telegram.getMe();
-  const member = await ctx.telegram.getChatMember(chat.id, botInfo.id);
-  if (member.status !== 'administrator') {
-    throw new Error('Bot kanalda administrator emas. Avval botni to\'liq admin qilib qo\'shing.');
-  }
-
-  const requiredPermissions = [
-    'can_manage_chat', 'can_change_info', 'can_post_messages', 'can_edit_messages',
-    'can_delete_messages', 'can_invite_users', 'can_restrict_members',
-    'can_promote_members', 'can_manage_video_chats'
-  ];
-  const missing = requiredPermissions.filter((permission) => member[permission] !== true);
-  if (missing.length) throw new Error('Bot to\'liq admin emas. Barcha administrator huquqlarini yoqing.');
-
-  return { id: chat.id, title: chat.title || username, username: chat.username ? `@${chat.username}` : username };
+async function checkChannelPostingAccess(ctx, username) {
+  return findPostableChannel(ctx.telegram, ctx.from.id, username);
 }
 
 async function showChannels(ctx) {
@@ -1047,6 +1026,12 @@ app.get('/app', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+app.get('/mini-app.js', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.type('application/javascript');
+  res.sendFile(path.join(__dirname, 'mini-app.js'));
+});
+
 app.use('/api/mini-app', express.json({ limit: '8mb' }), (req, res, next) => {
   try {
     req.miniAppUser = verifyTelegramInitData(req.get('X-Telegram-Init-Data'), token);
@@ -1060,25 +1045,34 @@ app.get('/api/mini-app/bootstrap', async (req, res) => {
   try {
     const account = await User.findOne({ telegramId: req.miniAppUser.id }).lean();
     if (!account) return res.status(404).json({ error: 'Avval botda /start buyrug‘ini bosing.' });
-    const settings = {
-      silent: false,
-      linkPreview: true,
-      signatureEnabled: false,
-      signature: '',
-      ...(account.miniAppSettings || {})
-    };
-    delete settings.language;
+    const channels = account.channels || [];
     return res.json({
       user: {
         id: account.telegramId,
         name: [req.miniAppUser.first_name, req.miniAppUser.last_name].filter(Boolean).join(' '),
         username: req.miniAppUser.username || '',
+        personalId: account.personalId || null,
+        joinedAt: account.joinedAt || null,
         premium: Boolean(account.premium)
       },
-      channels: account.channels || [],
-      posts: account.miniAppPosts || [],
-      settings
+      channels,
+      statistics: buildMiniAppStatistics(account, channels),
+      premium: {
+        active: Boolean(account.premium),
+        cardNumber: String(data.settings?.premiumCardNumber || '9860 0803 9258 5933').trim(),
+        price: Number(data.settings?.premiumPrice) || 10000
+      },
+      isAdmin: req.miniAppUser.username?.toLowerCase() === ADMIN_USERNAME
     });
+  } catch (error) {
+    return miniAppError(res, error);
+  }
+});
+
+app.get('/api/mini-app/statistics', async (req, res) => {
+  try {
+    const account = await getMiniAppAccount(req.miniAppUser.id);
+    return res.json({ statistics: buildMiniAppStatistics(account, account.channels || []) });
   } catch (error) {
     return miniAppError(res, error);
   }
@@ -1120,7 +1114,7 @@ bot.command('post', startPostCreation);
 bot.command('stats', (ctx) => ctx.reply(premiumStatsText(ctx), mainKeyboard(ctx)));
 bot.command('app', (ctx) => {
   if (!webAppUrl) return ctx.reply('Mini App manzili sozlanmagan. WEB_APP_URL ni HTTPS manzilga sozlang.');
-  return ctx.reply('Mini App’ni ochish uchun quyidagi tugmani bosing.', miniAppKeyboard());
+  return ctx.reply('Mini App’ni ochish uchun quyidagi tugmani bosing.', miniAppKeyboard(ctx));
 });
 bot.command('settings', (ctx) => ctx.reply('Bot faqat o‘zbek tilida ishlaydi.', mainKeyboard(ctx)));
 bot.command('premium', (ctx) => ctx.reply(buildPremiumText(ctx), {
@@ -1711,7 +1705,7 @@ bot.on('text', async (ctx) => {
 
   if (sessionState.step === 'channel') {
     try {
-      const channel = await checkFullAdmin(ctx, normalizeChannel(trimmedText));
+      const channel = await checkChannelPostingAccess(ctx, normalizeChannel(trimmedText));
       const account = userData(ctx.from.id);
       if (!account.premium && account.channels.length >= 1) {
         return ctx.reply(`${tr(ctx, 'Limit tugadi. Premium ta`rifni sotib oling!')}`, { parse_mode: 'HTML', reply_markup: mainKeyboard(ctx) });
@@ -1841,303 +1835,8 @@ async function getMiniAppAccount(telegramId) {
   return account;
 }
 
-function normalizeMiniAppPost(body, account, current = {}) {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    throw miniAppStatusError('Post ma’lumotlari noto‘g‘ri.');
-  }
-  const title = String(body.title || '').trim();
-  const caption = String(body.caption || '').trim();
-  const channelIds = [...new Set((Array.isArray(body.channelIds) ? body.channelIds : [])
-    .map((id) => Number(id))
-    .filter(Number.isSafeInteger))];
-  if (!title || title.length > 256) throw miniAppStatusError('Sarlavhani 1–256 belgi oralig‘ida kiriting.');
-  if (caption.length > 4096) throw miniAppStatusError('Post matni 4096 belgidan oshmasligi kerak.');
-  if (!caption && !body.photoData && !current.photoData) throw miniAppStatusError('Postga matn yoki rasm qo‘shing.');
-  if (!channelIds.length) throw miniAppStatusError('Kamida bitta kanalni tanlang.');
-
-  const ownedChannels = new Set((account.channels || []).map((channel) => Number(channel.id)));
-  if (channelIds.some((id) => !ownedChannels.has(id))) {
-    throw miniAppStatusError('Tanlangan kanallardan biri akkauntingizga tegishli emas.', 403);
-  }
-
-  let photoData = current.photoData || '';
-  let photoMimeType = current.photoMimeType || '';
-  if (body.photoData !== undefined) {
-    if (body.photoData === null || body.photoData === '') {
-      photoData = '';
-      photoMimeType = '';
-    } else {
-      photoMimeType = String(body.photoMimeType || '');
-      if (!['image/jpeg', 'image/png'].includes(photoMimeType)) {
-        throw miniAppStatusError('Faqat JPG yoki PNG rasm yuklash mumkin.');
-      }
-      photoData = String(body.photoData);
-      if (photoData.length > 7_000_000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(photoData)) {
-        throw miniAppStatusError('Rasm 5 MB dan kichik bo‘lishi kerak.');
-      }
-    }
-  }
-
-  let buttons = current.buttons || [];
-  if (body.button !== undefined) {
-    const buttonText = String(body.button?.text || '').trim();
-    const buttonUrl = String(body.button?.url || '').trim();
-    buttons = [];
-    if (buttonText || buttonUrl) {
-      if (!buttonText || buttonText.length > 64 || !isUrl(buttonUrl) || !/^https?:/i.test(buttonUrl)) {
-        throw miniAppStatusError('Tugma nomi (1–64 belgi) va http/https havolani to‘g‘ri kiriting.');
-      }
-      buttons = [{ text: buttonText, url: buttonUrl }];
-    }
-  }
-
-  const signature = String(body.signature ?? current.signature ?? '').trim().slice(0, 256);
-  const signatureEnabled = body.signatureEnabled === undefined ? Boolean(current.signatureEnabled) : Boolean(body.signatureEnabled);
-  if (photoData && [caption, signatureEnabled && signature].filter(Boolean).join('\n\n').length > 1024) {
-    throw miniAppStatusError('Rasmli post matni va imzosi jami 1024 belgidan oshmasligi kerak.');
-  }
-
-  return {
-    ...current,
-    title,
-    caption,
-    channelIds,
-    buttons,
-    photoData,
-    photoMimeType,
-    silent: Boolean(body.silent ?? current.silent),
-    linkPreview: body.linkPreview === undefined ? current.linkPreview !== false : Boolean(body.linkPreview),
-    signatureEnabled,
-    signature
-  };
-}
-
-async function sendMiniAppPost(telegramId, post) {
-  const account = await getMiniAppAccount(telegramId);
-  const channels = account.channels || [];
-  const channelById = new Map(channels.map((channel) => [Number(channel.id), channel]));
-  const recipients = post.channelIds.map((id) => channelById.get(Number(id))).filter(Boolean);
-  if (!recipients.length || recipients.length !== post.channelIds.length) {
-    throw miniAppStatusError('Post yuboriladigan kanal topilmadi.', 409);
-  }
-
-  const postLog = (account.postLog || []).filter((timestamp) => Number(timestamp) >= Date.now() - 86400000);
-  if (!account.premium && postLog.length >= 3) {
-    throw miniAppStatusError('Kunlik post limiti tugadi. Premium tarifni ko‘ring.', 403);
-  }
-
-  const claimed = await User.findOneAndUpdate({
-    telegramId,
-    miniAppPosts: {
-      $elemMatch: { id: post.id, status: { $in: ['draft', 'scheduled'] } }
-    }
-  }, {
-    $set: { 'miniAppPosts.$.status': 'sending' },
-    $push: { postLog: Date.now() }
-  }, { returnDocument: 'after' }).lean();
-  if (!claimed) throw miniAppStatusError('Post hozir yuborilmoqda yoki yuborilgan.', 409);
-
-  const claimedPost = claimed.miniAppPosts.find((item) => item.id === post.id);
-  const caption = [claimedPost.caption, claimedPost.signatureEnabled && claimedPost.signature]
-    .filter(Boolean)
-    .join('\n\n');
-  const replyMarkup = claimedPost.buttons?.length
-    ? Markup.inlineKeyboard(claimedPost.buttons.map((button) => [Markup.button.url(button.text, button.url)])).reply_markup
-    : undefined;
-  const sentChannelIds = [];
-  const errors = [];
-
-  for (const channel of recipients) {
-    try {
-      const options = {
-        disable_notification: Boolean(claimedPost.silent),
-        reply_markup: replyMarkup
-      };
-      if (claimedPost.photoData) {
-        const extension = claimedPost.photoMimeType === 'image/png' ? 'png' : 'jpg';
-        await bot.telegram.sendPhoto(channel.id, {
-          source: Buffer.from(claimedPost.photoData, 'base64'),
-          filename: `post.${extension}`
-        }, { ...options, caption: caption || undefined });
-      } else {
-        await bot.telegram.sendMessage(channel.id, caption, {
-          ...options,
-          disable_web_page_preview: !claimedPost.linkPreview
-        });
-      }
-      sentChannelIds.push(channel.id);
-    } catch (error) {
-      errors.push({ channelId: channel.id, message: error.response?.description || error.message });
-      console.error(`Mini App post send failed for ${channel.id}:`, error.response?.description || error.message);
-    }
-  }
-
-  const sentAt = new Date();
-  const finalStatus = sentChannelIds.length ? 'sent' : 'failed';
-  await User.updateOne({
-    telegramId,
-    'miniAppPosts.id': post.id
-  }, {
-    $set: {
-      'miniAppPosts.$.status': finalStatus,
-      'miniAppPosts.$.sentAt': sentChannelIds.length ? sentAt : null,
-      'miniAppPosts.$.sentChannelIds': sentChannelIds,
-      'miniAppPosts.$.lastError': errors.length ? errors.map((item) => item.message).join('; ').slice(0, 1000) : ''
-    },
-    ...(sentChannelIds.length ? {
-      $inc: { publishedPosts: 1, publishedChannels: sentChannelIds.length },
-      $push: {
-        postStats: {
-          $each: [{
-            publishedAt: sentAt,
-            channelIds: sentChannelIds,
-            channelCount: sentChannelIds.length,
-            mediaType: claimedPost.photoData ? 'photo' : 'text'
-          }],
-          $slice: -100
-        }
-      }
-    } : {})
-  });
-
-  if (sentChannelIds.length) {
-    data.stats.postsSent = (data.stats.postsSent || 0) + sentChannelIds.length;
-    await saveData();
-  }
-  return { status: finalStatus, sentChannelIds, errors };
-}
-
-app.post('/api/mini-app/posts', async (req, res) => {
-  try {
-    const account = await getMiniAppAccount(req.miniAppUser.id);
-    const post = normalizeMiniAppPost(req.body, account);
-    post.id = crypto.randomUUID();
-    post.status = 'draft';
-    post.createdAt = new Date();
-    post.scheduledAt = null;
-    await User.updateOne({ telegramId: account.telegramId }, { $push: { miniAppPosts: post } });
-    return res.status(201).json({ post });
-  } catch (error) {
-    return miniAppError(res, error);
-  }
-});
-
-app.patch('/api/mini-app/posts/:postId', async (req, res) => {
-  try {
-    const account = await getMiniAppAccount(req.miniAppUser.id);
-    const existing = (account.miniAppPosts || []).find((post) => post.id === req.params.postId);
-    if (!existing) throw miniAppStatusError('Post topilmadi.', 404);
-    if (!['draft', 'scheduled'].includes(existing.status)) throw miniAppStatusError('Yuborilgan postni tahrirlab bo‘lmaydi.', 409);
-    const updated = normalizeMiniAppPost(req.body, account, existing);
-    Object.assign(existing, updated);
-    if (req.body?.unschedule === true && existing.status === 'scheduled') {
-      existing.status = 'draft';
-      existing.scheduledAt = null;
-    }
-    await User.updateOne({ telegramId: account.telegramId }, { $set: { miniAppPosts: account.miniAppPosts } });
-    return res.json({ post: existing });
-  } catch (error) {
-    return miniAppError(res, error);
-  }
-});
-
-app.post('/api/mini-app/posts/:postId/duplicate', async (req, res) => {
-  try {
-    const account = await getMiniAppAccount(req.miniAppUser.id);
-    const original = (account.miniAppPosts || []).find((post) => post.id === req.params.postId);
-    if (!original) throw miniAppStatusError('Post topilmadi.', 404);
-    const duplicate = {
-      ...original,
-      id: crypto.randomUUID(),
-      title: `${original.title} (nusxa)`.slice(0, 256),
-      status: 'draft',
-      createdAt: new Date(),
-      scheduledAt: null,
-      sentAt: null,
-      sentChannelIds: [],
-      lastError: ''
-    };
-    await User.updateOne({ telegramId: account.telegramId }, { $push: { miniAppPosts: duplicate } });
-    return res.status(201).json({ post: duplicate });
-  } catch (error) {
-    return miniAppError(res, error);
-  }
-});
-
-app.post('/api/mini-app/posts/:postId/schedule', async (req, res) => {
-  try {
-    const account = await getMiniAppAccount(req.miniAppUser.id);
-    const post = (account.miniAppPosts || []).find((item) => item.id === req.params.postId);
-    if (!post) throw miniAppStatusError('Post topilmadi.', 404);
-    if (!['draft', 'scheduled'].includes(post.status)) throw miniAppStatusError('Bu postni rejalashtirib bo‘lmaydi.', 409);
-    const scheduledAt = new Date(req.body?.scheduledAt);
-    if (!Number.isFinite(scheduledAt.getTime()) || scheduledAt.getTime() < Date.now() + 60000) {
-      throw miniAppStatusError('Yuborish vaqtini kamida 1 daqiqa keyinga belgilang.');
-    }
-    post.status = 'scheduled';
-    post.scheduledAt = scheduledAt;
-    await User.updateOne({ telegramId: account.telegramId }, { $set: { miniAppPosts: account.miniAppPosts } });
-    return res.json({ post });
-  } catch (error) {
-    return miniAppError(res, error);
-  }
-});
-
-app.post('/api/mini-app/posts/:postId/publish', async (req, res) => {
-  try {
-    const result = await sendMiniAppPost(req.miniAppUser.id, { id: req.params.postId });
-    const account = await getMiniAppAccount(req.miniAppUser.id);
-    const post = account.miniAppPosts.find((item) => item.id === req.params.postId);
-    return res.json({ post, result });
-  } catch (error) {
-    return miniAppError(res, error);
-  }
-});
-
-app.delete('/api/mini-app/posts/:postId', async (req, res) => {
-  try {
-    const account = await getMiniAppAccount(req.miniAppUser.id);
-    const post = (account.miniAppPosts || []).find((item) => item.id === req.params.postId);
-    if (!post) throw miniAppStatusError('Post topilmadi.', 404);
-    if (post.status === 'sending') throw miniAppStatusError('Yuborilayotgan postni o‘chirib bo‘lmaydi.', 409);
-    await User.updateOne({ telegramId: account.telegramId }, {
-      $pull: { miniAppPosts: { id: req.params.postId } }
-    });
-    return res.json({ ok: true });
-  } catch (error) {
-    return miniAppError(res, error);
-  }
-});
-
-app.delete('/api/mini-app/posts', async (req, res) => {
-  try {
-    const account = await getMiniAppAccount(req.miniAppUser.id);
-    const posts = (account.miniAppPosts || []).filter((post) => post.status !== 'draft');
-    await User.updateOne({ telegramId: account.telegramId }, { $set: { miniAppPosts: posts } });
-    return res.json({ ok: true });
-  } catch (error) {
-    return miniAppError(res, error);
-  }
-});
-
-app.patch('/api/mini-app/settings', async (req, res) => {
-  try {
-    const account = await getMiniAppAccount(req.miniAppUser.id);
-    const input = req.body || {};
-    const current = account.miniAppSettings || {};
-    const settings = {
-      silent: input.silent === undefined ? Boolean(current.silent) : Boolean(input.silent),
-      linkPreview: input.linkPreview === undefined ? current.linkPreview !== false : Boolean(input.linkPreview),
-      signatureEnabled: input.signatureEnabled === undefined ? Boolean(current.signatureEnabled) : Boolean(input.signatureEnabled),
-      signature: String(input.signature ?? current.signature ?? '').trim().slice(0, 256)
-    };
-    await User.updateOne({ telegramId: account.telegramId }, {
-      $set: { miniAppSettings: settings }
-    });
-    return res.json({ settings });
-  } catch (error) {
-    return miniAppError(res, error);
-  }
+app.use('/api/mini-app/posts', (req, res) => {
+  return res.status(410).json({ error: 'Mini App orqali post yuborish va rejalashtirish o‘chirilgan.' });
 });
 
 app.post('/api/mini-app/channels', async (req, res) => {
@@ -2145,7 +1844,7 @@ app.post('/api/mini-app/channels', async (req, res) => {
     const account = await getMiniAppAccount(req.miniAppUser.id);
     const username = normalizeChannel(String(req.body?.username || ''));
     if (!/^@[A-Za-z0-9_]{5,32}$/.test(username)) throw miniAppStatusError('Kanal username’ini @belgisi bilan kiriting.');
-    const channel = await checkFullAdmin({ telegram: bot.telegram, from: { id: req.miniAppUser.id } }, username);
+    const channel = await checkChannelPostingAccess({ telegram: bot.telegram, from: { id: req.miniAppUser.id } }, username);
     if ((account.channels || []).some((item) => Number(item.id) === Number(channel.id))) {
       throw miniAppStatusError('Bu kanal allaqachon qo‘shilgan.', 409);
     }
@@ -2162,45 +1861,94 @@ app.delete('/api/mini-app/channels/:channelId', async (req, res) => {
     const channelId = Number(req.params.channelId);
     if (!Number.isSafeInteger(channelId)) throw miniAppStatusError('Kanal ID noto‘g‘ri.');
     const account = await getMiniAppAccount(req.miniAppUser.id);
-    if (!(account.channels || []).some((channel) => Number(channel.id) === channelId)) {
+    const channels = account.channels || [];
+    if (!channels.some((channel) => Number(channel.id) === channelId)) {
       throw miniAppStatusError('Kanal topilmadi.', 404);
     }
-    await User.updateOne({ telegramId: account.telegramId }, { $pull: { channels: { id: channelId } } });
-    const updated = await getMiniAppAccount(account.telegramId);
-    return res.json({ channels: updated.channels });
+    const updatedChannels = channels.filter((channel) => Number(channel.id) !== channelId);
+    await User.updateOne({ telegramId: account.telegramId }, { $set: { channels: updatedChannels } });
+    return res.json({ channels: updatedChannels });
   } catch (error) {
     return miniAppError(res, error);
   }
 });
 
-async function processScheduledMiniAppPosts() {
-  const dueAccounts = await User.find({
-    miniAppPosts: { $elemMatch: { status: 'scheduled', scheduledAt: { $lte: new Date() } } }
-  }, { telegramId: 1, miniAppPosts: 1 }).limit(20).lean();
+app.post('/api/mini-app/premium/request', async (req, res) => {
+  try {
+    const account = await getMiniAppAccount(req.miniAppUser.id);
+    if (account.premium) throw miniAppStatusError('Siz allaqachon Premium tarifidasiz.', 409);
 
-  for (const account of dueAccounts) {
-    for (const post of account.miniAppPosts.filter((item) => item.status === 'scheduled' && new Date(item.scheduledAt) <= new Date())) {
-      try {
-        await sendMiniAppPost(account.telegramId, { id: post.id });
-      } catch (error) {
-        console.error(`Scheduled Mini App post ${post.id} failed:`, error.message);
-        await User.updateOne({
-          telegramId: account.telegramId,
-          'miniAppPosts.id': post.id,
-          'miniAppPosts.status': 'scheduled'
-        }, {
-          $set: {
-            'miniAppPosts.$.status': 'failed',
-            'miniAppPosts.$.lastError': error.message.slice(0, 1000)
-          }
-        });
-      }
+    const photoMimeType = String(req.body?.photoMimeType || '');
+    const photoData = String(req.body?.photoData || '');
+    if (!['image/jpeg', 'image/png'].includes(photoMimeType) ||
+      photoData.length > 7_000_000 ||
+      !/^[A-Za-z0-9+/]+={0,2}$/.test(photoData)) {
+      throw miniAppStatusError('5 MB gacha bo‘lgan JPG yoki PNG to‘lov chekini yuboring.');
+    }
+    const receipt = Buffer.from(photoData, 'base64');
+    if (receipt.length > 5 * 1024 * 1024) {
+      throw miniAppStatusError('To‘lov cheki 5 MB dan kichik bo‘lishi kerak.');
+    }
+
+    const requester = req.miniAppUser;
+    await bot.telegram.sendPhoto(ADMIN_TG_ID, {
+      source: receipt,
+      filename: `premium-receipt.${photoMimeType === 'image/png' ? 'png' : 'jpg'}`
+    }, {
+      caption: `Premium so‘rovi\n\n` +
+        `Foydalanuvchi: ${requester.username ? `@${requester.username}` : requester.first_name || requester.id}\n` +
+        `Telegram ID: ${requester.id}\n` +
+        `Bot personal ID: ${account.personalId || '—'}\n\n` +
+        `Mini App orqali to‘lov cheki yuborildi.`,
+      reply_markup: Markup.inlineKeyboard([
+        [Markup.button.callback('Premium berish', `admin:premium_approve:${requester.id}`)],
+        [Markup.button.callback('Premium bermaslik', `admin:premium_reject:${requester.id}`)]
+      ]).reply_markup
+    });
+    return res.status(202).json({ ok: true, message: 'To‘lov cheki adminga yuborildi. Tasdiq kutilmoqda.' });
+  } catch (error) {
+    return miniAppError(res, error);
+  }
+});
+
+app.post('/api/mini-app/media', async (req, res) => {
+  let output;
+  try {
+    const media = parseMediaUrl(req.body?.url);
+    if (!media) {
+      throw miniAppStatusError('Qo‘llab-quvvatlanadigan rasm, video yoki ijtimoiy tarmoq havolasini kiriting.');
+    }
+
+    const caption = `\n\nBot manzili: ${getBotPublicLink()}`;
+    if (media.type === 'social') {
+      output = path.join(__dirname, 'tmp-media', `mini-app-${crypto.randomUUID()}.mp4`);
+      await fs.promises.mkdir(path.dirname(output), { recursive: true });
+      await downloadWithYtDlp(output, media.url);
+      await bot.telegram.sendVideo(req.miniAppUser.id, {
+        source: fs.createReadStream(output),
+        filename: 'media.mp4'
+      }, { caption, supports_streaming: true });
+    } else if (media.type === 'video') {
+      await bot.telegram.sendVideo(req.miniAppUser.id, media.url, {
+        caption,
+        supports_streaming: true
+      });
+    } else {
+      await bot.telegram.sendPhoto(req.miniAppUser.id, media.url, { caption });
+    }
+    return res.json({ ok: true, message: 'Media bot chatiga yuborildi.' });
+  } catch (error) {
+    return miniAppError(res, error);
+  } finally {
+    if (output) {
+      await fs.promises.unlink(output).catch((error) => {
+        if (error.code !== 'ENOENT') console.error('Mini App media cleanup failed:', error);
+      });
     }
   }
-}
+});
 
 let pollingLeaseTimer;
-let scheduledPostsTimer;
 let leaseRenewalRunning = false;
 let shutdownRequested = false;
 
@@ -2273,7 +2021,6 @@ function renewPollingLease() {
 async function shutdown(signal) {
   shutdownRequested = true;
   clearInterval(pollingLeaseTimer);
-  clearInterval(scheduledPostsTimer);
   bot.stop(signal);
   server.close();
 
@@ -2296,12 +2043,6 @@ async function startBot() {
   await acquirePollingLease();
   renewPollingLease();
   await bot.launch();
-  await processScheduledMiniAppPosts();
-  scheduledPostsTimer = setInterval(() => {
-    processScheduledMiniAppPosts().catch((error) => {
-      console.error('Scheduled Mini App posts check failed:', error);
-    });
-  }, 15000);
   try {
     console.log('Bot ishga tushdi.');
     await setupBotCommands();

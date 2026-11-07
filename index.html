@@ -217,82 +217,59 @@ html,body,.push{background:radial-gradient(90% 38% at 0% 0%,rgba(0,122,255,.3),t
 <symbol id="i-plus" viewBox="0 0 24 24"><g class="s" style="stroke-width:2.6"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></g></symbol>
 </svg>
 <div id="app">
-  <!-- POSTLAR -->
-  <section class="tab on" id="t-posts">
-    <div class="large">Postlar <button class="plus" onclick="openSheet()"><svg class="i"><use href="#i-plus"/></svg></button></div>
-    <div class="seg" id="seg"><i></i>
-      <button onclick="seg(0)">Qoralama</button><button onclick="seg(1)">Rejalangan</button><button onclick="seg(2)">Yuborilgan</button>
-    </div>
-    <div id="list"></div>
+  <section class="tab on" id="t-stats">
+    <div class="large">Post statistikasi <button class="plus" onclick="refreshStatistics()"><svg class="i"><use href="#i-inbox"/></svg></button></div>
+    <div class="group" id="statsSummary"></div>
+    <div class="head">So‘nggi yuborilgan postlar</div>
+    <div class="group" id="recentPosts"></div>
   </section>
 
-  <!-- KANALLAR -->
   <section class="tab" id="t-ch">
     <div class="large">Kanallar</div>
     <div class="head">Ulangan kanallar</div>
     <div class="group" id="chs"></div>
-    <button class="cta gray" onclick="addChannel()">Kanal qo'shish</button>
+    <button class="cta gray" onclick="addChannel()">Kanal qo‘shish</button>
+    <div class="foot">Kanal public bo‘lishi kerak. Siz kanal egasi yoki admini, bot esa post yuborish huquqiga ega admin bo‘lishi lozim.</div>
   </section>
 
-  <!-- SOZLAMALAR -->
+  <section class="tab" id="t-profile">
+    <div class="large">Profil</div>
+    <div class="group" id="profileInfo"></div>
+    <div class="head">Premium</div>
+    <div class="group" id="premiumInfo"></div>
+    <input id="receipt" type="file" accept="image/jpeg,image/png" hidden>
+    <button class="cta" id="premiumRequest" onclick="chooseReceipt()">To‘lov chekini yuborish</button>
+    <div class="head" style="margin-top:22px">Media saqlash</div>
+    <div class="group">
+      <div class="field"><input id="mediaUrl" type="url" inputmode="url" placeholder="Rasm, video yoki ijtimoiy tarmoq havolasi"></div>
+      <button class="cta gray" id="mediaDownload" onclick="downloadMedia()">Media bot chatiga yuborish</button>
+    </div>
+    <div class="head" style="margin-top:22px">Yordam</div>
+    <div class="group">
+      <div class="row"><div class="t"><b>Kanallarni ulash</b><small>Botni kanalga post yuborish huquqi bilan administrator qilib qo‘shing, keyin kanal username’ini kiriting.</small></div></div>
+      <div class="row"><div class="t"><b>Post yuborish</b><small>Post yaratish va yuborish Mini App’da mavjud emas. Botning asosiy menyusidan foydalaning.</small></div></div>
+      <div class="row"><div class="t"><b>Media saqlash</b><small>YouTube, Instagram, TikTok, X, Facebook, VK, Vimeo yoki to‘g‘ridan-to‘g‘ri rasm/video havolasini yuboring.</small></div></div>
+      <div class="row"><div class="t"><b>Yordam xizmati</b><small>Botda /help buyrug‘ini yuboring.</small></div></div>
+    </div>
+  </section>
+
   <section class="tab" id="t-set">
     <div class="large">Sozlamalar</div>
-    <div class="group">
-      <button class="row chev"><div class="ic" style="background:var(--blue)"><svg class="i"><use href="#i-user"/></svg></div><div class="t"><b id="uname">Foydalanuvchi</b><small>Bot egasi</small></div></button>
-    </div>
-    <div class="head">Yuborish</div>
-    <div class="group">
-      <div class="row"><div class="ic" style="background:var(--orange)"><svg class="i"><use href="#i-bell"/></svg></div><div class="t"><b>Ovozsiz yuborish</b></div><div class="sw" id="silent" onclick="toggleSetting('silent',this)"></div></div>
-      <div class="row"><div class="ic" style="background:var(--green)"><svg class="i"><use href="#i-link"/></svg></div><div class="t"><b>Havola ko'rinishi</b></div><div class="sw on" id="linkPreview" onclick="toggleSetting('linkPreview',this)"></div></div>
-      <div class="row"><div class="ic" style="background:#5856d6"><svg class="i"><use href="#i-pen"/></svg></div><div class="t"><b>Imzo qo'shish</b></div><div class="sw" id="signatureEnabled" onclick="toggleSetting('signatureEnabled',this)"></div></div>
-      <div class="field"><input id="signature" maxlength="256" placeholder="Post oxiridagi imzo" onchange="saveSettings()"></div>
-    </div>
     <div class="head">Ko'rinish</div>
     <div class="group">
       <div class="row"><div class="ic" style="background:#1c1c1e"><svg class="i"><use href="#i-moon"/></svg></div><div class="t"><b>Tungi rejim</b></div><div class="sw" id="dk"></div></div>
     </div>
-    <div class="group"><button class="row" onclick="clearAll()"><div class="t"><b style="color:var(--red)">Barcha qoralamalarni o'chirish</b></div></button></div>
   </section>
 </div>
 
 <nav id="bar"><i class="ind"></i>
-  <button class="on" onclick="tab(0,this)"><span><svg class="i"><use href="#i-doc"/></svg></span>Postlar</button>
+  <button class="on" onclick="tab(0,this)"><span><svg class="i"><use href="#i-inbox"/></svg></span>Statistika</button>
   <button onclick="tab(1,this)"><span><svg class="i"><use href="#i-mega"/></svg></span>Kanallar</button>
-  <button onclick="tab(2,this)"><span><svg class="i"><use href="#i-gear"/></svg></span>Sozlamalar</button>
+  <button onclick="tab(2,this)"><span><svg class="i"><use href="#i-user"/></svg></span>Profil</button>
+  <button onclick="tab(3,this)"><span><svg class="i"><use href="#i-gear"/></svg></span>Sozlamalar</button>
 </nav>
 
-<!-- PUSH: post tafsilotlari -->
-<div class="push" id="detail">
-  <div class="nav"><button onclick="closeDetail()">‹ Orqaga</button><h3>Post</h3><button onclick="actions()">•••</button></div>
-  <div class="bubble" id="pv"></div>
-  <div class="head" style="margin-top:22px">Ma'lumot</div>
-  <div class="group" id="info"></div>
-  <button class="cta" onclick="sendNow()">Hozir yuborish</button>
-</div>
-
-<!-- Sheet: yangi post -->
 <div class="dim" id="dim" onclick="closeAll()"></div>
-<div class="sheet" id="sheet">
-  <div class="grab"></div>
-  <div class="nav" style="position:static;margin:0 -16px 10px;background:none;border:0;backdrop-filter:none">
-    <button onclick="closeAll()">Bekor</button><h3>Yangi post</h3><button onclick="save(false)" style="font-weight:600">Saqlash</button>
-  </div>
-  <div class="head">Sarlavha</div>
-  <div class="field"><input id="ti" placeholder="Post sarlavhasi"></div>
-  <div class="head">Matn</div>
-  <div class="field"><textarea id="tx" maxlength="4096" placeholder="Post matnini yozing…"></textarea></div>
-  <div class="head">Rasm (ixtiyoriy, 5 MB gacha)</div>
-  <div class="field"><input id="photo" type="file" accept="image/jpeg,image/png"></div>
-  <div class="group">
-    <div class="row"><div class="t"><b>Havolali tugma</b></div><div class="sw" id="bt" onclick="toggleButtonFields()"></div></div>
-    <div id="buttonFields" hidden><div class="field"><input id="buttonText" maxlength="64" placeholder="Tugma nomi"></div><div class="field"><input id="buttonUrl" type="url" placeholder="https://..."></div></div>
-    <button class="row chev" onclick="pickCh()"><div class="t"><b>Kanal</b></div><span class="v" id="chv">Tanlang</span></button>
-  </div>
-  <div class="head">Yuborish vaqti (ixtiyoriy)</div>
-  <div class="field"><input id="scheduledAt" type="datetime-local"></div>
-  <button class="cta" onclick="save(true)">Yuborish</button>
-</div>
-
 <div class="sheet" id="channelSheet">
   <div class="grab"></div>
   <div class="nav" style="position:static;margin:0 -16px 10px;background:none;border:0;backdrop-filter:none">
@@ -300,282 +277,13 @@ html,body,.push{background:radial-gradient(90% 38% at 0% 0%,rgba(0,122,255,.3),t
   </div>
   <div class="head">Kanal username</div>
   <div class="field"><input id="channelUsername" type="text" placeholder="@my_channel" autocomplete="off"></div>
-  <div class="foot">Kanal public bo‘lishi va bot hamda siz administrator bo‘lishingiz kerak.</div>
+  <div class="foot">Public kanal username’ini kiriting. Siz kanal egasi yoki admini, bot esa post yuborish huquqiga ega admin bo‘lishi kerak.</div>
 </div>
 
-<!-- Action sheet -->
-<div class="as" id="as"><div class="box">
-  <div class="ttl" id="asT">Amallar</div><div id="asB"></div></div>
-  <button class="cancel" onclick="closeAll()">Bekor qilish</button>
-</div>
-
-<!-- Alert -->
 <div class="alert" id="al"><div class="m"><b id="alT"></b><span id="alM"></span></div>
   <div class="bt"><button onclick="closeAll()">Yo'q</button><button class="red" id="alY">Ha</button></div></div>
 <div id="toast"></div>
 
-<script>
-const tg = window.Telegram?.WebApp;
-tg?.ready(); tg?.expand();
-const $ = s => document.querySelector(s);
-const haptic = (t='light') => tg?.HapticFeedback?.impactOccurred(t);
-const apiBase='/api/mini-app';
-const state={channels:[],posts:[],settings:{},user:null,tab:0,status:0,selected:null,selectedChannel:null,editingId:null};
-const statusNames={draft:'Qoralama',scheduled:'Rejalangan',sent:'Yuborilgan',failed:'Xatolik',sending:'Yuborilmoqda'};
-let toastTimer;
-
-function esc(value){return String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]))}
-function setTheme(theme){
-  document.documentElement.dataset.theme=theme;
-  try{tg?.setHeaderColor(theme==='dark'?'#000000':'#f2f2f7');tg?.setBackgroundColor(theme==='dark'?'#000000':'#f2f2f7')}catch{}
-}
-function toast(message){
-  const element=$('#toast');element.textContent=message;element.classList.add('on');
-  clearTimeout(toastTimer);toastTimer=setTimeout(()=>element.classList.remove('on'),2600)
-}
-async function request(path,options={}){
-  const response=await fetch(`${apiBase}${path}`,{
-    ...options,
-    headers:{
-      'Content-Type':'application/json',
-      'X-Telegram-Init-Data':tg?.initData||'',
-      ...(options.headers||{})
-    }
-  });
-  const result=await response.json().catch(()=>({error:'Server javobi noto‘g‘ri.'}));
-  if(!response.ok)throw new Error(result.error||'So‘rov bajarilmadi.');
-  return result
-}
-function statusIndex(status){return status==='scheduled'?1:status==='sent'?2:0}
-function formatDate(value){
-  if(!value)return '';
-  const date=new Date(value);
-  return Number.isNaN(date.getTime())?'':date.toLocaleString('uz-UZ',{dateStyle:'short',timeStyle:'short'})
-}
-function localDateTimeValue(value){
-  if(!value)return '';
-  const date=new Date(value);
-  return new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16)
-}
-function channelName(id){return state.channels.find(channel=>Number(channel.id)===Number(id))?.title||'Kanal topilmadi'}
-
-function render(){
-  const posts=state.posts.filter(post=>statusIndex(post.status)===state.status);
-  $('#list').innerHTML=posts.length?'<div class="group">'+posts.map(post=>
-    `<button class="row chev" data-post-id="${esc(post.id)}"><div class="t"><b>${esc(post.title)}</b><small>${esc(post.caption||'Rasmli post')}</small></div><span class="v" style="font-size:13px">${esc(formatDate(post.scheduledAt||post.sentAt||post.createdAt))}</span></button>`
-  ).join('')+'</div>':'<div class="empty"><div style="display:grid;place-items:center"><svg class="i" style="width:52px;height:52px;stroke-width:1.5"><use href="#i-inbox"/></svg></div><p>Bu bo‘limda post yo‘q.<br>Yangi post uchun “+” tugmasini bosing.</p></div>';
-
-  $('#chs').innerHTML=state.channels.length?state.channels.map((channel,index)=>
-    `<div class="row"><div class="ic" style="background:${['#007aff','#ff9500','#34c759','#5856d6'][index%4]}">${esc((channel.title||'K').slice(0,1))}</div><div class="t"><b>${esc(channel.title)}</b><small>${esc(channel.username||channel.id)}</small></div><button class="v" data-remove-channel="${esc(channel.id)}" aria-label="Kanalni o‘chirish">O‘chirish</button></div>`
-  ).join(''):'<div class="empty">Kanal qo‘shilmagan.</div>';
-
-  $('#uname').textContent=state.user?.name||state.user?.username||'Foydalanuvchi';
-  $('#uname').nextElementSibling.textContent=state.user?.premium?'Premium foydalanuvchi':'Bot foydalanuvchisi';
-  $('#silent').classList.toggle('on',Boolean(state.settings.silent));
-  $('#linkPreview').classList.toggle('on',state.settings.linkPreview!==false);
-  $('#signatureEnabled').classList.toggle('on',Boolean(state.settings.signatureEnabled));
-  $('#signature').value=state.settings.signature||'';
-}
-async function reload(){
-  const data=await request('/bootstrap');
-  state.channels=data.channels||[];state.posts=data.posts||[];state.settings=data.settings||{};
-  state.user=data.user;render()
-}
-
-function seg(index){
-  state.status=index;haptic('soft');$('#seg i').style.transform=`translateX(${index*100}%)`;render()
-}
-function tab(index,button){
-  if(index===state.tab)return;
-  document.querySelectorAll('.tab').forEach((element,key)=>{
-    if(key===state.tab)element.style.setProperty('--x',index>state.tab?'-28px':'28px');
-    else if(key!==index)element.style.setProperty('--x',key<index?'-28px':'28px');
-    element.classList.toggle('on',key===index)
-  });
-  state.tab=index;$('#bar .ind').style.transform=`translateX(${index*100}%)`;
-  document.querySelectorAll('#bar button').forEach(element=>element.classList.remove('on'));
-  button.classList.add('on');haptic('light')
-}
-function dim(value){$('#dim').classList.toggle('on',value)}
-function closeAll(){['#sheet','#channelSheet','#as','#al'].forEach(selector=>$(selector).classList.remove('on'));dim(false)}
-function openSheet(post=null){
-  if(!state.channels.length){toast('Avval kanal qo‘shing.');tab(1,$$('#bar button')[1]);return}
-  state.editingId=post?.id||null;
-  state.selectedChannel=post?.channelIds?.[0]??null;
-  $('#ti').value=post?.title||'';$('#tx').value=post?.caption||'';
-  $('#buttonText').value=post?.buttons?.[0]?.text||'';
-  $('#buttonUrl').value=post?.buttons?.[0]?.url||'';
-  $('#bt').classList.toggle('on',Boolean(post?.buttons?.length));
-  $('#buttonFields').hidden=!post?.buttons?.length;
-  $('#chv').textContent=state.selectedChannel===null?'Tanlang':channelName(state.selectedChannel);
-  $('#photo').value='';$('#scheduledAt').value=localDateTimeValue(post?.scheduledAt);
-  $('#scheduledAt').min=localDateTimeValue(Date.now()+60000);updateScheduleButton();
-  $('#sheet').querySelector('h3').textContent=post?'Postni tahrirlash':'Yangi post';
-  dim(true);$('#sheet').classList.add('on');haptic()
-}
-function $$ (selector){return document.querySelectorAll(selector)}
-function closeDetail(){ $('#detail').classList.remove('open');document.body.classList.remove('pushed');tg?.BackButton?.hide();haptic() }
-function openDetail(id){
-  state.selected=state.posts.find(post=>post.id===id);
-  if(!state.selected)return;
-  const post=state.selected;
-  const photo=post.photoData?`<img src="data:${esc(post.photoMimeType)};base64,${esc(post.photoData)}" alt="" style="width:100%;max-height:180px;object-fit:cover;border-radius:12px;margin-bottom:8px">`:'';
-  const button=post.buttons?.[0]?`<a class="btn" href="${esc(post.buttons[0].url)}" target="_blank" rel="noopener">${esc(post.buttons[0].text)}</a>`:'';
-  $('#pv').innerHTML=`${photo}<b>${esc(post.title)}</b>\n${esc(post.caption||'Rasmli post')}${button}`;
-  const names=(post.channelIds||[]).map(channelName).map(esc).join(', ');
-  const status=statusNames[post.status]||post.status;
-  $('#info').innerHTML=`<div class="row"><div class="t"><b>Holat</b></div><span class="pill" style="background:${post.status==='sent'?'var(--green)':post.status==='failed'?'var(--red)':'var(--orange)'}">${esc(status)}</span></div><div class="row"><div class="t"><b>Kanal</b></div><span class="v">${names}</span></div><div class="row"><div class="t"><b>Vaqt</b></div><span class="v">${esc(formatDate(post.scheduledAt||post.sentAt||post.createdAt)||'Belgilanmagan')}</span></div>${post.lastError?`<div class="row"><div class="t"><b>Xatolik</b><small>${esc(post.lastError)}</small></div></div>`:''}`;
-  $('#detail').querySelector('.cta').style.display=['draft','scheduled'].includes(post.status)?'block':'none';
-  $('#detail').scrollTop=0;$('#detail').classList.add('open');document.body.classList.add('pushed');tg?.BackButton?.show()
-}
-tg?.BackButton?.onClick(()=>$('#detail').classList.contains('open')?closeDetail():closeAll());
-
-function actions(){
-  if(!state.selected)return;
-  const post=state.selected;
-  $('#asT').textContent=post.title;
-  const buttons=[];
-  if(['draft','scheduled'].includes(post.status))buttons.push('<button onclick="sendNow()">Hozir yuborish</button>','<button onclick="sched()">Rejalashtirish</button>','<button onclick="editSelected()">Tahrirlash</button>');
-  buttons.push('<button onclick="dup()">Nusxa olish</button>','<button class="red" onclick="confirmDel()">O‘chirish</button>');
-  $('#asB').innerHTML=buttons.join('');dim(true);$('#as').classList.add('on');haptic()
-}
-function editSelected(){closeAll();openSheet(state.selected)}
-function pickCh(){
-  $('#asT').textContent='Kanalni tanlang';
-  $('#asB').innerHTML=state.channels.map(channel=>`<button onclick="setCh('${esc(channel.id)}')">${esc(channel.title)}</button>`).join('');
-  $('#as').classList.add('on')
-}
-function setCh(id){state.selectedChannel=Number(id);$('#chv').textContent=channelName(id);$('#as').classList.remove('on');haptic('soft')}
-function toggleButtonFields(){
-  $('#bt').classList.toggle('on');$('#buttonFields').hidden=!$('#bt').classList.contains('on');haptic('light')
-}
-async function readPhoto(){
-  const file=$('#photo').files[0];
-  if(!file)return undefined;
-  if(file.size>5*1024*1024)throw new Error('Rasm 5 MB dan kichik bo‘lishi kerak.');
-  if(!['image/jpeg','image/png'].includes(file.type))throw new Error('Faqat JPG yoki PNG rasm yuklash mumkin.');
-  const bytes=new Uint8Array(await file.arrayBuffer());
-  let binary='';for(let i=0;i<bytes.length;i+=0x8000)binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));
-  return {photoData:btoa(binary),photoMimeType:file.type}
-}
-async function save(send){
-  try{
-    const scheduleValue=$('#scheduledAt').value;
-    const body={
-      title:$('#ti').value.trim(),caption:$('#tx').value.trim(),
-      channelIds:state.selectedChannel===null?[]:[state.selectedChannel],
-      button:$('#bt').classList.contains('on')?{text:$('#buttonText').value,url:$('#buttonUrl').value}:null,
-      silent:Boolean(state.settings.silent),linkPreview:state.settings.linkPreview!==false,
-      signatureEnabled:Boolean(state.settings.signatureEnabled),signature:state.settings.signature||'',
-      unschedule:!scheduleValue&&state.posts.some(post=>post.id===state.editingId&&post.status==='scheduled')
-    };
-    Object.assign(body,await readPhoto());
-    if(state.editingId){
-      await request(`/posts/${encodeURIComponent(state.editingId)}`,{method:'PATCH',body:JSON.stringify(body)})
-    }else{
-      const {post}=await request('/posts',{method:'POST',body:JSON.stringify(body)});
-      state.editingId=post.id
-    }
-    let postId=state.editingId;
-    if(scheduleValue){
-      await request(`/posts/${encodeURIComponent(postId)}/schedule`,{method:'POST',body:JSON.stringify({scheduledAt:new Date(scheduleValue).toISOString()})});
-      closeAll();await reload();seg(1);toast('Post rejalashtirildi.');return
-    }
-    if(send){
-      const result=await request(`/posts/${encodeURIComponent(postId)}/publish`,{method:'POST'});
-      if(result.result.status==='failed')throw new Error(result.result.errors?.[0]?.message||'Post yuborilmadi.');
-    }
-    closeAll();$('#sheet').querySelector('h3').textContent='Yangi post';
-    await reload();seg(send?2:0);toast(send?'Post kanalga yuborildi.':'Qoralama saqlandi.');
-    tg?.HapticFeedback?.notificationOccurred('success')
-  }catch(error){tg?.HapticFeedback?.notificationOccurred('error');toast(error.message)}
-}
-async function sendNow(){
-  try{
-    const {result}=await request(`/posts/${encodeURIComponent(state.selected.id)}/publish`,{method:'POST'});
-    if(result.status==='failed')throw new Error(result.errors?.[0]?.message||'Post yuborilmadi.');
-    closeAll();closeDetail();await reload();seg(2);
-    toast(result.errors?.length?'Post ayrim kanallarga yuborilmadi.':'Post yuborildi.');
-    tg?.HapticFeedback?.notificationOccurred(result.errors?.length?'warning':'success')
-  }catch(error){closeAll();toast(error.message)}
-}
-function sched(){
-  closeAll();closeDetail();openSheet(state.selected);
-  $('#scheduledAt').value='';$('#scheduledAt').focus();updateScheduleButton();
-  toast('Vaqtni tanlang va “Saqlash” tugmasini bosing.')
-}
-async function dup(){
-  try{
-    await request(`/posts/${encodeURIComponent(state.selected.id)}/duplicate`,{method:'POST'});
-    closeAll();closeDetail();await reload();seg(0);toast('Post nusxalandi.')
-  }catch(error){closeAll();toast(error.message)}
-}
-function confirmAction(title,message,action){
-  $('#alT').textContent=title;$('#alM').textContent=message;
-  $('#alY').onclick=action;dim(true);$('#al').classList.add('on')
-}
-function confirmDel(){
-  $('#as').classList.remove('on');
-  confirmAction('Postni o‘chirasizmi?','Bu amalni bekor qilib bo‘lmaydi.',async()=>{
-    try{await request(`/posts/${encodeURIComponent(state.selected.id)}`,{method:'DELETE'});closeAll();closeDetail();await reload();toast('Post o‘chirildi.')}
-    catch(error){closeAll();toast(error.message)}
-  })
-}
-function clearAll(){
-  confirmAction('Qoralamalar o‘chirilsinmi?','Barcha qoralamalar yo‘qoladi.',async()=>{
-    try{await request('/posts',{method:'DELETE'});closeAll();await reload();toast('Qoralamalar o‘chirildi.')}
-    catch(error){closeAll();toast(error.message)}
-  });haptic()
-}
-function addChannel(){
-  $('#channelUsername').value='';dim(true);$('#channelSheet').classList.add('on');$('#channelUsername').focus()
-}
-async function submitChannel(){
-  const username=$('#channelUsername').value.trim();
-  if(!username){toast('Kanal username’ini kiriting.');return}
-  try{
-    const data=await request('/channels',{method:'POST',body:JSON.stringify({username})});
-    state.channels=data.channels;closeAll();render();toast('Kanal qo‘shildi.')
-  }catch(error){closeAll();toast(error.message)}
-}
-async function removeChannel(id){
-  confirmAction('Kanalni o‘chirasizmi?','Bu kanal bot ro‘yxatidan o‘chiriladi.',async()=>{
-    try{const data=await request(`/channels/${encodeURIComponent(id)}`,{method:'DELETE'});state.channels=data.channels;closeAll();render();toast('Kanal o‘chirildi.')}
-    catch(error){closeAll();toast(error.message)}
-  })
-}
-async function toggleSetting(name,element){
-  state.settings[name]=!element.classList.contains('on');
-  element.classList.toggle('on',state.settings[name]);haptic('light');await saveSettings()
-}
-async function saveSettings(){
-  state.settings.signature=$('#signature').value;
-  try{
-    const data=await request('/settings',{method:'PATCH',body:JSON.stringify(state.settings)});
-    state.settings=data.settings;toast('Sozlamalar saqlandi.')
-  }catch(error){toast(error.message);await reload().catch(()=>{})}
-}
-function updateScheduleButton(){
-  const button=$('#sheet .nav button:last-child');
-  if(button)button.textContent=$('#scheduledAt').value?'Rejalashtirish':'Yuborish'
-}
-function setLocalTheme(theme){localStorage.setItem('mini-app-theme',theme);setTheme(theme)}
-document.querySelectorAll('.tab').forEach((element,index)=>element.style.setProperty('--x',index?'28px':'0px'));
-document.querySelector('#list').addEventListener('click',event=>{
-  const row=event.target.closest('[data-post-id]');if(row)openDetail(row.dataset.postId)
-});
-$('#chs').addEventListener('click',event=>{
-  const button=event.target.closest('[data-remove-channel]');if(button)removeChannel(button.dataset.removeChannel)
-});
-$('#scheduledAt').addEventListener('input',updateScheduleButton);
-const initialTheme=localStorage.getItem('mini-app-theme')||(tg?.colorScheme==='dark'?'dark':'light');
-setTheme(initialTheme);$('#dk').classList.toggle('on',initialTheme==='dark');
-$('#dk').addEventListener('click',()=>{const theme=$('#dk').classList.contains('on')?'light':'dark';$('#dk').classList.toggle('on');setLocalTheme(theme)});
-if(tg?.initData){
-  reload().catch(error=>{toast(error.message);$('#list').innerHTML=`<div class="empty">${esc(error.message)}</div>`})
-}else{
-  $('#list').innerHTML='<div class="empty">Mini App’ni Telegram ichidan oching.</div>'
-}
-</script>
+<script src="/mini-app.js"></script>
 </body>
 </html>

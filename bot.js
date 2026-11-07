@@ -51,9 +51,6 @@ const botConfigSchema = new mongoose.Schema({
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 const BotConfig = mongoose.models.BotConfig || mongoose.model('BotConfig', botConfigSchema);
-const BOT_POLLING_LEASE_KEY = 'telegram_polling_lease';
-const BOT_POLLING_LEASE_MS = 60000;
-const BOT_POLLING_RENEW_INTERVAL_MS = 15000;
 const botInstanceId = require('node:crypto').randomUUID();
 
 const express = require('express');
@@ -98,6 +95,12 @@ const { verifyTelegramInitData } = require('./mini-app-auth');
 const { findPostableChannel } = require('./channel-access');
 const { buildMiniAppStatistics } = require('./mini-app-data');
 const { parseMediaUrl } = require('./media-url');
+const {
+  POLLING_LEASE_KEY,
+  POLLING_LEASE_RENEW_INTERVAL_MS,
+  createLeaseExpiry,
+  getLeaseRetryDelay
+} = require('./polling-lease');
 const {
   decorateTelegramPayload,
   isCustomEmojiError,
@@ -1951,6 +1954,7 @@ app.post('/api/mini-app/media', async (req, res) => {
 let pollingLeaseTimer;
 let leaseRenewalRunning = false;
 let shutdownRequested = false;
+let shutdownPromise;
 
 async function acquirePollingLease() {
   await BotConfig.init();
@@ -1960,7 +1964,7 @@ async function acquirePollingLease() {
     const now = new Date();
     try {
       const lease = await BotConfig.findOneAndUpdate({
-        configKey: BOT_POLLING_LEASE_KEY,
+        configKey: POLLING_LEASE_KEY,
         $or: [
           { leaseExpiresAt: { $lte: now } },
           { leaseOwner: botInstanceId }
@@ -1968,7 +1972,7 @@ async function acquirePollingLease() {
       }, {
         $set: {
           leaseOwner: botInstanceId,
-          leaseExpiresAt: new Date(now.getTime() + BOT_POLLING_LEASE_MS)
+          leaseExpiresAt: createLeaseExpiry(now.getTime())
         }
       }, {
         upsert: true,
@@ -1984,10 +1988,15 @@ async function acquirePollingLease() {
     }
 
     if (!waitingForLease) {
-      console.log('Bot boshqa server nusxasida ishlayapti. Polling uchun navbat kutilmoqda.');
+      console.log('Boshqa server nusxasi Telegram update’larini qabul qilmoqda. Bu nusxa polling lease bo‘shashini kutmoqda.');
       waitingForLease = true;
     }
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    const activeLease = await BotConfig.findOne(
+      { configKey: POLLING_LEASE_KEY },
+      { leaseExpiresAt: 1 }
+    ).lean();
+    const retryDelay = getLeaseRetryDelay(activeLease?.leaseExpiresAt);
+    await new Promise((resolve) => setTimeout(resolve, retryDelay));
   }
 
   throw new Error('Bot polling lease olinmasdan ishga tushirish to\'xtatildi.');
@@ -1999,10 +2008,10 @@ function renewPollingLease() {
     leaseRenewalRunning = true;
     try {
       const result = await BotConfig.updateOne({
-        configKey: BOT_POLLING_LEASE_KEY,
+        configKey: POLLING_LEASE_KEY,
         leaseOwner: botInstanceId
       }, {
-        $set: { leaseExpiresAt: new Date(Date.now() + BOT_POLLING_LEASE_MS) }
+        $set: { leaseExpiresAt: createLeaseExpiry() }
       });
       if (result.matchedCount !== 1) {
         throw new Error('Bot polling lease boshqa server nusxasiga o\'tdi.');
@@ -2015,27 +2024,32 @@ function renewPollingLease() {
     } finally {
       leaseRenewalRunning = false;
     }
-  }, BOT_POLLING_RENEW_INTERVAL_MS);
+  }, POLLING_LEASE_RENEW_INTERVAL_MS);
 }
 
-async function shutdown(signal) {
+function shutdown(signal) {
+  if (shutdownPromise) return shutdownPromise;
   shutdownRequested = true;
   clearInterval(pollingLeaseTimer);
   bot.stop(signal);
   server.close();
 
-  try {
-    await BotConfig.updateOne({
-      configKey: BOT_POLLING_LEASE_KEY,
-      leaseOwner: botInstanceId
-    }, {
-      $set: { leaseExpiresAt: new Date(0) }
-    });
-  } catch (error) {
-    console.error('Bot polling lease bo\'shatilmadi:', error);
-  }
+  shutdownPromise = (async () => {
+    try {
+      const result = await BotConfig.updateOne({
+        configKey: POLLING_LEASE_KEY,
+        leaseOwner: botInstanceId
+      }, {
+        $set: { leaseExpiresAt: new Date(0) }
+      });
+      if (result.matchedCount) console.log('Telegram polling lease bo‘shatildi.');
+    } catch (error) {
+      console.error('Bot polling lease bo\'shatilmadi:', error);
+    }
 
-  await mongoose.disconnect();
+    await mongoose.disconnect();
+  })();
+  return shutdownPromise;
 }
 
 async function startBot() {

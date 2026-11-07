@@ -851,6 +851,86 @@ const menuEmojis = {
   settings: '⚙️'
 };
 
+const APPEARANCE_MESSAGE_OPTIONS = [
+  {
+    id: 'welcome',
+    label: 'Xush kelibsiz xabari',
+    find: 'Assalomu alaykum! Kanal postlarini boshqarish botiga xush kelibsiz.',
+    replacements: ['Xush kelibsiz! Botimizga marhamat.', 'Assalomu alaykum! Bot xizmatga tayyor.']
+  },
+  {
+    id: 'preview',
+    label: 'Post preview tasdiqlash xabari',
+    find: 'Preview tayyor. Yuborishni tasdiqlaysizmi?',
+    replacements: ['Post ko‘rib chiqishga tayyor. Yuborilsinmi?', 'Post tayyor. Davom etamizmi?']
+  },
+  {
+    id: 'post_missing',
+    label: 'Post ma’lumoti topilmaganda',
+    find: 'Post ma\'lumotlari topilmadi.',
+    replacements: ['Post ma’lumoti mavjud emas.', 'Post topilmadi. Qaytadan urinib ko‘ring.']
+  },
+  {
+    id: 'channel_missing',
+    label: 'Kanal topilmaganda',
+    find: 'Kanal topilmadi.',
+    replacements: ['Kanal yoki guruh topilmadi.', 'Tanlangan kanal mavjud emas.']
+  },
+  {
+    id: 'cancelled',
+    label: 'Amal bekor qilinganda',
+    find: 'Amal bekor qilindi.',
+    replacements: ['Jarayon bekor qilindi.', 'Bekor qilindi. Boshqa amalni tanlashingiz mumkin.']
+  },
+  {
+    id: 'technical_error',
+    label: 'Texnik xatolik xabari',
+    find: 'Texnik xatolik yuz berdi. Qaytadan urinib ko\'ring.',
+    replacements: ['Xatolik yuz berdi. Iltimos, qayta urinib ko‘ring.', 'Hozircha amal bajarilmadi. Keyinroq urinib ko‘ring.']
+  },
+  {
+    id: 'menu_hint',
+    label: 'Menyu tanlash eslatmasi',
+    find: 'Kerakli amalni pastki menyudan tanlang.',
+    replacements: ['Davom etish uchun menyudan amalni tanlang.', 'Quyidagi tugmalardan birini bosing.']
+  },
+  {
+    id: 'already_premium',
+    label: 'Premium faol bo‘lgandagi xabar',
+    find: 'Siz allaqachon premium tarifga egasiz.',
+    replacements: ['Premium tarifingiz allaqachon faol.', 'Siz Premium foydalanuvchisiz.']
+  },
+  {
+    id: 'subscription_success',
+    label: 'Obuna tasdiqlangandagi xabar',
+    find: 'Obuna tasdiqlandi. Botdan foydalanishingiz mumkin.',
+    replacements: ['Obunangiz tasdiqlandi. Botdan foydalanishni boshlang.', 'Hammasi tayyor! Botdan foydalanishingiz mumkin.']
+  },
+  {
+    id: 'post_sent',
+    label: 'Post kanalga yuborilgandagi xabar',
+    find: 'kanalga muvaffaqiyatli yuborildi.',
+    replacements: ['kanalga post yuborildi.', 'kanalga post joylandi.']
+  }
+];
+
+const APPEARANCE_BUTTON_OPTIONS = [
+  { id: 'create_post', label: 'Post yaratish', find: 'Post yaratish', replacements: ['Yangi post', 'Post boshlash'] },
+  { id: 'channels', label: 'Kanallarim', find: 'Kanallarim', replacements: ['Kanallar va guruhlar', 'Ulangan kanallar'] },
+  { id: 'add_channel', label: 'Kanal yoki guruh ulash', find: 'Kanal yoki guruh ulash', replacements: ['Kanal ulash', 'Guruh ulash'] },
+  { id: 'statistics', label: 'Post statistikasi', find: 'Post statistikasi', replacements: ['Statistika', 'Natijalar'] },
+  { id: 'profile', label: 'Profilim', find: 'Profilim', replacements: ['Mening profilim', 'Hisobim'] },
+  { id: 'premium', label: 'Premium', find: 'Premium', replacements: ['Premium tarif', 'Premium olish'] },
+  { id: 'help', label: 'Yordam', find: 'Yordam', replacements: ['Yordam olish', 'Qo‘llanma'] },
+  { id: 'settings', label: 'Sozlamalar', find: 'Sozlamalar', replacements: ['Bot sozlamalari', 'Til va sozlamalar'] },
+  { id: 'back', label: 'Orqaga', find: 'Orqaga', replacements: ['Ortga qaytish', 'Oldingi menyu'] },
+  { id: 'cancel', label: 'Bekor qilish', find: 'Bekor qilish', replacements: ['Jarayonni bekor qilish', 'To‘xtatish'] },
+  { id: 'confirm', label: 'Tasdiqlash', find: 'Tasdiqlash', replacements: ['Ha, tasdiqlayman', 'Davom etish'] },
+  { id: 'preview', label: 'Preview', find: 'Preview', replacements: ['Ko‘rib chiqish', 'Postni ko‘rish'] },
+  { id: 'publish', label: 'Postni yuborish', find: 'Postni yuborish', replacements: ['Hozir yuborish', 'Postni joylash'] },
+  { id: 'add_link', label: 'Havolali tugma qo‘shish', find: 'Havolali tugma qo\'shish', replacements: ['Havola tugmasi qo‘shish', 'Tugma qo‘shish'] }
+];
+
 function menuButton(key, label) {
   return `${menuEmojis[key]} ${label}`;
 }
@@ -891,6 +971,33 @@ function adminAppearanceKeyboard() {
     [Markup.button.callback('Hammasini tiklash', 'admin:appearance:reset')],
     [Markup.button.callback('Admin panelga qaytish', 'admin:back')]
   ]);
+}
+
+function adminAppearanceMessageTargetsKeyboard() {
+  return Markup.inlineKeyboard([
+    ...APPEARANCE_MESSAGE_OPTIONS.map((option) => [
+      Markup.button.callback(option.label, `admin:appearance:message:${option.id}`)
+    ]),
+    [Markup.button.callback('Sozlamalarga qaytish', 'admin:appearance')]
+  ]);
+}
+
+function adminAppearanceButtonTargetsKeyboard() {
+  return Markup.inlineKeyboard([
+    ...APPEARANCE_BUTTON_OPTIONS.map((option) => [
+      Markup.button.callback(option.label, `admin:appearance:button:${option.id}`)
+    ]),
+    [Markup.button.callback('Sozlamalarga qaytish', 'admin:appearance')]
+  ]);
+}
+
+function adminAppearanceReplacementKeyboard(kind, option) {
+  const options = option.replacements.map((replacement, index) => [
+    Markup.button.callback(replacement, `admin:appearance:replace:${kind}:${option.id}:${index}`)
+  ]);
+  options.push([Markup.button.callback('Orqaga', `admin:appearance:${kind}`)]);
+  options.push([Markup.button.callback('Bekor qilish', 'admin:appearance')]);
+  return Markup.inlineKeyboard(options);
 }
 
 function adminAppearanceListKeyboard(overrides) {
@@ -1583,20 +1690,67 @@ bot.action('admin:appearance', async (ctx) => {
 bot.action('admin:appearance:message', async (ctx) => {
   await ctx.answerCbQuery();
   if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
-  ctx.session = { step: 'admin_appearance_message_find' };
-  return ctx.reply(
-    'O\'zgartirmoqchi bo\'lgan bot xabaridagi matn bo\'lagini aynan yuboring (maksimal 300 belgi).',
-    Markup.inlineKeyboard([[Markup.button.callback('Bekor qilish', 'admin:appearance')]])
-  );
+  reset(ctx);
+  return ctx.reply('O‘zgartirmoqchi bo‘lgan xabar turini tanlang:', adminAppearanceMessageTargetsKeyboard());
 });
 
 bot.action('admin:appearance:button', async (ctx) => {
   await ctx.answerCbQuery();
   if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
-  ctx.session = { step: 'admin_appearance_button_find' };
+  reset(ctx);
+  return ctx.reply('Nomini va rangini o‘zgartirmoqchi bo‘lgan tugmani tanlang:', adminAppearanceButtonTargetsKeyboard());
+});
+
+bot.action(/^admin:appearance:(message|button):([a-z0-9_]+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
+  const kind = ctx.match[1];
+  const catalog = kind === 'message' ? APPEARANCE_MESSAGE_OPTIONS : APPEARANCE_BUTTON_OPTIONS;
+  const option = catalog.find((item) => item.id === ctx.match[2]);
+  if (!option) return ctx.reply('Tayyor variant topilmadi.', adminAppearanceKeyboard());
+  ctx.session = {
+    step: `admin_appearance_${kind}_replace`,
+    appearanceId: option.id,
+    find: option.find
+  };
   return ctx.reply(
-    'O\'zgartirmoqchi bo\'lgan tugmaning hozirgi nomini aynan yuboring (maksimal 64 belgi).',
-    Markup.inlineKeyboard([[Markup.button.callback('Bekor qilish', 'admin:appearance')]])
+    `“${option.label}” uchun tayyor yangi variantni tanlang:`,
+    adminAppearanceReplacementKeyboard(kind, option)
+  );
+});
+
+bot.action(/^admin:appearance:replace:(message|button):([a-z0-9_]+):(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
+  const kind = ctx.match[1];
+  const catalog = kind === 'message' ? APPEARANCE_MESSAGE_OPTIONS : APPEARANCE_BUTTON_OPTIONS;
+  const option = catalog.find((item) => item.id === ctx.match[2]);
+  const replacement = option?.replacements[Number(ctx.match[3])];
+  if (!option || typeof replacement !== 'string') {
+    return ctx.reply('Tayyor variant topilmadi.', adminAppearanceKeyboard());
+  }
+  if (kind === 'message') {
+    const overrides = getInterfaceOverrides();
+    const rule = { find: option.find, replace: replacement };
+    const existingIndex = overrides.messages.findIndex((entry) => entry.find === rule.find);
+    if (existingIndex < 0 && overrides.messages.length >= 25) {
+      return ctx.reply('Xabar sozlamalari limiti (25) to‘ldi. Avval eski sozlamani o‘chiring.', adminAppearanceKeyboard());
+    }
+    if (existingIndex < 0) overrides.messages.push(rule);
+    else overrides.messages[existingIndex] = rule;
+    await saveData([], true);
+    reset(ctx);
+    return ctx.reply('Xabar matni saqlandi.', adminAppearanceKeyboard());
+  }
+  ctx.session = {
+    step: 'admin_appearance_button_color',
+    appearanceId: option.id,
+    find: option.find,
+    replace: replacement
+  };
+  return ctx.reply(
+    'Tugma rangini tanlang. Rang Telegram inline tugmalarida qo‘llanadi; pastki menyu tugmalari standart rangda qoladi:',
+    adminButtonColorKeyboard()
   );
 });
 
@@ -1659,6 +1813,7 @@ bot.action(/^admin:appearance:color:(primary|success|danger|default)$/, async (c
   if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
   const sessionState = ctx.session || {};
   if (sessionState.step !== 'admin_appearance_button_color' ||
+    typeof sessionState.appearanceId !== 'string' ||
     typeof sessionState.find !== 'string' ||
     typeof sessionState.replace !== 'string') {
     return ctx.reply('Tugma sozlash jarayoni topilmadi. Qaytadan boshlang.', adminAppearanceKeyboard());
@@ -2177,58 +2332,6 @@ bot.on('text', async (ctx) => {
   const sessionState = ctx.session || {};
   const text = ctx.message.text;
   const trimmedText = text.trim();
-
-  if (sessionState.step === 'admin_appearance_message_find') {
-    if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
-    if (!trimmedText || text.length > 300) {
-      return ctx.reply('Matn bo\'lagi bo\'sh bo\'lmasin va 300 belgidan oshmasin. Qaytadan yuboring:');
-    }
-    sessionState.find = text;
-    sessionState.step = 'admin_appearance_message_replace';
-    return ctx.reply('Xabarda uning o\'rniga ko\'rsatiladigan yangi matnni yuboring (maksimal 300 belgi):');
-  }
-
-  if (sessionState.step === 'admin_appearance_message_replace') {
-    if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
-    if (!trimmedText || text.length > 300) {
-      return ctx.reply('Yangi matn bo\'sh bo\'lmasin va 300 belgidan oshmasin. Qaytadan yuboring:');
-    }
-    const overrides = getInterfaceOverrides();
-    const rule = { find: sessionState.find, replace: text };
-    const existingIndex = overrides.messages.findIndex((entry) => entry.find === rule.find);
-    if (existingIndex < 0 && overrides.messages.length >= 25) {
-      reset(ctx);
-      return ctx.reply('Xabar sozlamalari limiti (25) to\'ldi. Avval eski sozlamani o\'chiring.', adminAppearanceKeyboard());
-    }
-    if (existingIndex < 0) overrides.messages.push(rule);
-    else overrides.messages[existingIndex] = rule;
-    await saveData([], true);
-    reset(ctx);
-    return ctx.reply('Xabar matni saqlandi.', adminAppearanceKeyboard());
-  }
-
-  if (sessionState.step === 'admin_appearance_button_find') {
-    if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
-    if (!trimmedText || text.length > 64) {
-      return ctx.reply('Tugma nomi bo\'sh bo\'lmasin va 64 belgidan oshmasin. Qaytadan yuboring:');
-    }
-    sessionState.find = text;
-    sessionState.step = 'admin_appearance_button_replace';
-    return ctx.reply('Tugma uchun yangi nomni yuboring (maksimal 60 belgi):');
-  }
-
-  if (sessionState.step === 'admin_appearance_button_replace') {
-    if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
-    if (!trimmedText || Array.from(text).length > 60) {
-      return ctx.reply('Yangi tugma nomi bo\'sh bo\'lmasin va 60 belgidan oshmasin. Qaytadan yuboring:');
-    }
-    sessionState.replace = text;
-    sessionState.step = 'admin_appearance_button_color';
-    return ctx.reply(
-      'Tugma rangini tanlang. Rang Telegram inline tugmalarida qo\'llanadi; pastki menyu tugmalari standart rangda qoladi:',
-      adminButtonColorKeyboard()
-    );
-  }
 
   if (sessionState.step === 'admin_premium_stars_price_edit') {
     if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');

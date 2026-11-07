@@ -76,7 +76,7 @@ function renderStatistics() {
   const statistics = state.statistics || {};
   $('#statsSummary').innerHTML = [
     ['Yuborilgan postlar', statistics.publishedPosts || 0],
-    ['Kanallarga yuborilgan nusxalar', statistics.publishedChannels || 0],
+    ['Chatlarga yuborilgan nusxalar', statistics.publishedChannels || 0],
     ['Saqlangan shablonlar', statistics.templateCount || 0],
     ['Oxirgi post', formatDate(statistics.lastPublishedAt)]
   ].map(([label, value]) =>

@@ -2,7 +2,7 @@
 
 ## Ishga tushirish
 
-1. Node.js 18 yoki undan yangisini o‘rnating.
+1. Node.js 20.19 yoki undan yangisini o‘rnating.
 2. Terminalda loyiha papkasiga kiring va `npm install` buyrug‘ini bajaring.
 3. `.env.example` faylidan nusxa olib `.env` nomli fayl yarating:
 

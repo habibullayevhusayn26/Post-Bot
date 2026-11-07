@@ -51,17 +51,20 @@ const botConfigSchema = new mongoose.Schema({
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 const BotConfig = mongoose.models.BotConfig || mongoose.model('BotConfig', botConfigSchema);
-const botInstanceId = require('node:crypto').randomUUID();
+const botInstanceId = crypto.randomUUID();
 
 const express = require('express');
 const app = express();
 const port = Number(process.env.PORT) || 3000;
 
 app.get('/', (req, res) => res.send('Bot ishlamoqda...'));
-app.get('/health', (req, res) => res.status(200).json({
-  ok: true,
-  mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
-}));
+app.get('/health', (req, res) => {
+  const isDatabaseConnected = mongoose.connection.readyState === 1;
+  return res.status(isDatabaseConnected ? 200 : 503).json({
+    ok: isDatabaseConnected,
+    mongodb: isDatabaseConnected ? 'connected' : 'disconnected'
+  });
+});
 
 const server = app.listen(port, '0.0.0.0', () => {
   console.log(`Express server ${port} portda ishlayapti.`);
@@ -434,8 +437,6 @@ if (data.settings.requiredChannel && Array.isArray(data.settings.requiredChannel
   delete data.settings.requiredChannel;
 }
 if (!Array.isArray(data.settings.requiredChannels)) data.settings.requiredChannels = [];
-const ADMIN_USERNAME = 'habibullayev_28';
-const ADMIN_PUBLIC_USERNAME = '@habibullayev_28';
 const ADMIN_TG_ID = 7669387254;
 const text = {
   channels: { uz: 'Kanallarim' },
@@ -524,36 +525,43 @@ function localizeReply(ctx, message) {
   return message;
 }
 data.settings.requiredChannels ||= [];
-data.settings.premiumCardNumber ||=  '9860 0803 9258 5933';
+data.settings.premiumCardNumber ||= '9860 0803 9258 5933';
 data.settings.premiumPrice ||= 10000;
 data.stats = { postsSent: 0, broadcastsSent: 0 };
 
 let mongoWriteQueue = Promise.resolve();
 
-function saveData() {
-  mongoWriteQueue = mongoWriteQueue.then(async () => {
-    const userOperations = Object.entries(data.users).map(([telegramId, account]) => {
-      const { miniAppPosts, miniAppSettings, ...persistedAccount } = account;
-      return {
-        updateOne: {
-          filter: { telegramId: Number(telegramId) },
-          update: { $set: { ...persistedAccount, telegramId: Number(telegramId) } },
-          upsert: true
-        }
-      };
-    });
+function saveData(userIds = [], persistConfig = true) {
+  const ids = [...new Set((Array.isArray(userIds) ? userIds : [userIds]).map(String))];
+  const write = mongoWriteQueue.then(async () => {
+    const userOperations = ids
+      .map((telegramId) => [telegramId, data.users[telegramId]])
+      .filter(([, account]) => account)
+      .map(([telegramId, account]) => {
+        const { miniAppPosts, miniAppSettings, ...persistedAccount } = account;
+        return {
+          updateOne: {
+            filter: { telegramId: Number(telegramId) },
+            update: { $set: { ...persistedAccount, telegramId: Number(telegramId) } },
+            upsert: true
+          }
+        };
+      });
     if (userOperations.length) await User.bulkWrite(userOperations, { ordered: false });
-    await BotConfig.updateOne({ configKey: 'main_config' }, {
-      $set: {
-        channels: data.settings.requiredChannels || [],
-        settings: data.settings,
-        stats: data.stats,
-      }
-    }, { upsert: true });
-  }).catch((error) => {
+    if (persistConfig) {
+      await BotConfig.updateOne({ configKey: 'main_config' }, {
+        $set: {
+          channels: data.settings.requiredChannels || [],
+          settings: data.settings,
+          stats: data.stats,
+        }
+      }, { upsert: true });
+    }
+  });
+  mongoWriteQueue = write.catch((error) => {
     console.error('MongoDB persistence failed:', error.message);
   });
-  return mongoWriteQueue;
+  return write;
 }
 
 function accountFromMongo(document) {
@@ -663,7 +671,7 @@ async function ensureUserInMongo(ctx, includeReferral = false) {
   const update = {
     $set: {
       username: ctx.from.username || '',
-      nickname: ctx.from.first_name || ctx.from.last_name || '',
+      nickname: [ctx.from.first_name, ctx.from.last_name].filter(Boolean).join(' '),
       language: 'uz'
     },
     $setOnInsert: {
@@ -687,7 +695,7 @@ function tr(ctx, key, fallback = key) {
 }
 
 function isAdmin(ctx) {
-  return ctx.from?.username?.toLowerCase() === ADMIN_USERNAME;
+  return Number(ctx.from?.id) === ADMIN_TG_ID;
 }
 
 const menuEmojis = {
@@ -832,7 +840,7 @@ async function broadcastPost(ctx, post) {
   }
 
   const buttons = post.finalButtons || postButtons(post);
-  const replyMarkup = Markup.inlineKeyboard(buttons).reply_markup;
+  const replyMarkup = postReplyMarkup(buttons);
   let sent = 0;
 
   const channelResults = await runWithConcurrency([...channelIds], 5, async (chatId) => {
@@ -860,7 +868,7 @@ async function broadcastPost(ctx, post) {
 
   data.stats.broadcastsSent += 1;
   data.stats.postsSent += sent;
-  await saveData();
+  await saveData([], true);
   return sent;
 }
 
@@ -902,7 +910,7 @@ function multiChannelKeyboard(ctx, channels, selectedIds = []) {
   const selected = new Set(selectedIds.map((id) => String(id)));
   return Markup.inlineKeyboard([
     ...channels.map((channel) => [Markup.button.callback(
-      `${selected.has(String(channel.id)) ? '' : ''} ${channel.title}`,
+      `${selected.has(String(channel.id)) ? '✓ ' : ''}${channel.title}`,
       `multi_channel:${channel.id}`
     )]),
     [Markup.button.callback('Chatlarni tasdiqlash', 'multi_channels_done')],
@@ -944,6 +952,10 @@ function confirmationKeyboard(ctx) {
 
 function postButtons(post) {
   return post.buttons || [];
+}
+
+function postReplyMarkup(buttons) {
+  return buttons?.length ? Markup.inlineKeyboard(buttons).reply_markup : undefined;
 }
 
 function postHasContent(post) {
@@ -991,7 +1003,7 @@ async function sendPreview(ctx) {
   const { post } = ctx.session;
   if (!postHasContent(post)) return ctx.reply('Post ma\'lumotlari topilmadi.');
   ctx.session.previewButtons = postButtons(post);
-  const replyMarkup = Markup.inlineKeyboard(ctx.session.previewButtons).reply_markup;
+  const replyMarkup = postReplyMarkup(ctx.session.previewButtons);
   ctx.session.step = 'confirm';
   await sendPostToChat(ctx, ctx.from.id, post, replyMarkup);
   return ctx.reply('Preview tayyor. Yuborishni tasdiqlaysizmi?', confirmationKeyboard(ctx));
@@ -1033,31 +1045,6 @@ function normalizePersonalId(value) {
   return input.replace(/\D/g, '');
 }
 
-function buildUserProfileText(user, fromId) {
-  return `Foydalanuvchi profili\n\n` +
-    `Username: ${user.username || user.nickname || '—'}\n` +
-    `Nickname: ${user.nickname || '—'}\n` +
-    `Bot personal ID: ${user.personalId || '—'}\n` +
-    `Telegram ID: ${fromId}`;
-}
-
-async function sendToAdmin(message) {
-  try {
-    const chat = await bot.telegram.getChat(ADMIN_USERNAME);
-    return bot.telegram.sendMessage(chat.id, message);
-  } catch (error) {
-    console.error('Admin message send failed:', error.message);
-  }
-}
-
-async function chargeOrAllowPost(ctx) {
-  const account = userData(ctx.from.id);
-  account.postLog ||= [];
-  account.postLog.push(Date.now());
-  saveData();
-  return { ok: true };
-}
-
 async function findUserByPersonalId(id) {
   const target = String(id).trim();
   const account = await User.findOne({ personalId: Number(target) }).lean();
@@ -1079,49 +1066,23 @@ async function handleStart(ctx) {
   const account = await ensureUserInMongo(ctx, true);
   account.language = 'uz';
   await User.updateOne({ telegramId: Number(ctx.from.id) }, { $set: { language: 'uz' } });
-  saveData();
   reset(ctx);
-  await requiredSubscription(ctx);
+  if (!await requiredSubscription(ctx)) return;
   return ctx.reply('Assalomu alaykum! Kanal postlarini boshqarish botiga xush kelibsiz.', {
     parse_mode: 'HTML',
     reply_markup: mainKeyboard(ctx)
   });
 }
 
-async function sendAdminMessage(ctx, messageText) {
-  try {
-    const chat = await bot.telegram.getChat(ADMIN_PUBLIC_USERNAME);
-    const account = userData(ctx.from.id);
-    return bot.telegram.sendMessage(chat.id, `Adminga murojaat\n\n` +
-      `Foydalanuvchi: ${ctx.from.username || ctx.from.first_name || ctx.from.id}\n` +
-      `Bot personal ID: ${account.personalId || '—'}\n` +
-      `Telegram ID: ${ctx.from.id}\n\n` +
-      `${messageText}`);
-  } catch (error) {
-    console.error('Admin message send failed:', error.response?.description || error.message);
-  }
-}
-
 async function chargeForPostIfNeeded(ctx) {
   const account = userData(ctx.from.id);
-  if (account.premium) {
-    account.postLog ||= [];
-    account.postLog.push(Date.now());
-    saveData();
-    return { ok: true };
-  }
-
-  const now = Date.now();
-  const windowStart = now - 24 * 60 * 60 * 1000;
+  const chargedAt = Date.now();
+  const windowStart = chargedAt - 24 * 60 * 60 * 1000;
   const recentLog = Array.isArray(account.postLog) ? account.postLog.filter((ts) => Number(ts) >= windowStart) : [];
-  account.postLog = recentLog;
-  if (recentLog.length >= 3) {
-    return { ok: false, message: `${tr(ctx, 'Limit tugadi. Premium ta`rifni sotib oling!')}` };
+  if (!account.premium && recentLog.length >= 3) {
+    return { ok: false, message: 'Limit tugadi. Premium tarifni sotib oling!' };
   }
-
-  account.postLog.push(now);
-  saveData();
-  return { ok: true };
+  return { ok: true, chargedAt };
 }
 
 
@@ -1296,7 +1257,7 @@ app.get('/api/mini-app/bootstrap', async (req, res) => {
         cardNumber: String(data.settings?.premiumCardNumber || '9860 0803 9258 5933').trim(),
         price: Number(data.settings?.premiumPrice) || 10000
       },
-      isAdmin: req.miniAppUser.username?.toLowerCase() === ADMIN_USERNAME
+      isAdmin: Number(req.miniAppUser.id) === ADMIN_TG_ID
     });
   } catch (error) {
     return miniAppError(res, error);
@@ -1319,13 +1280,9 @@ function reset(ctx) {
 bot.use(session());
 
 bot.use(async (ctx, next) => {
-  const isStart = ctx.message?.text === '/start';
+  const isStart = /^\/start(?:@\w+)?(?:\s|$)/i.test(ctx.message?.text || '');
   if (ctx.from && !isStart) {
-    const wasExisting = Boolean(await User.exists({ telegramId: Number(ctx.from.id) }));
     await ensureUserInMongo(ctx);
-    if (!wasExisting && ctx.session) {
-      ctx.session.justCreated = true;
-    }
   }
 
   const originalReply = ctx.reply.bind(ctx);
@@ -1369,7 +1326,10 @@ bot.hears([...new Set(['Post yuborish', ...Object.values(text.createPost), ...Ob
 bot.hears([...new Set(['Kanallar ro\'yxati', ...Object.values(text.channels), ...Object.values(text.channels).map((label) => menuButton('channels', label))])], showChannels);
 bot.hears(Object.values(text.addChannel), (ctx) => {
   ctx.session = { step: 'channel' };
-  ctx.reply('Kanal username sini yuboring, masalan: @my_channel');
+  return ctx.reply(
+    'Ulash uchun kanal yoki guruhni tanlang. Chatni ro‘yxatdan ko‘rmasangiz, public kanal username’ini yuborishingiz mumkin.',
+    chatPickerKeyboard()
+  );
 });
 
 bot.hears([...Object.values(text.profile), ...Object.values(text.profile).map((label) => menuButton('profile', label))], (ctx) => {
@@ -1437,7 +1397,7 @@ bot.action(/^admin:premium_approve:(\d+)$/, async (ctx) => {
   const userId = Number(ctx.match[1]);
   const account = userData(userId);
   account.premium = true;
-  saveData();
+  await saveData([userId], false);
 
   try {
     await bot.telegram.sendMessage(userId, `Premium tarif tasdiqlandi. Endi premium imkoniyatlardan foydalanishingiz mumkin.`, {
@@ -1467,7 +1427,7 @@ bot.action(/^admin:premium_reject:(\d+)$/, async (ctx) => {
   const userId = Number(ctx.match[1]);
   const account = userData(userId);
   account.premium = false;
-  saveData();
+  await saveData([userId], false);
 
   try {
     await bot.telegram.sendMessage(userId, `Premium so\'rovi rad etildi. Tekshiruvda muammo mavjud.`, {
@@ -1520,7 +1480,7 @@ bot.action('admin:subscription_off', async (ctx) => {
     { $set: { channels: [], 'settings.requiredChannels': [] }, $unset: { 'settings.requiredChannel': 1 } },
     { upsert: true, returnDocument: 'after' }
   );
-  saveData();
+  await saveData([], true);
   return ctx.reply('Majburiy obuna o\'chirildi.', adminKeyboard(ctx));
 });
 
@@ -1636,7 +1596,7 @@ bot.action(/^remove:(-?\d+)$/, async (ctx) => {
   await ctx.answerCbQuery();
   const account = userData(ctx.from.id);
   account.channels = account.channels.filter((item) => String(item.id) !== ctx.match[1]);
-  saveData();
+  await saveData([ctx.from.id], false);
   return ctx.reply('Chat ro\'yxatdan o\'chirildi.', mainKeyboard(ctx));
 });
 
@@ -1748,7 +1708,7 @@ bot.action('save_template', async (ctx) => {
     createdAt: new Date()
   });
   account.templates = account.templates.slice(-20);
-  saveData();
+  await saveData([ctx.from.id], false);
   return ctx.reply('Post shablon sifatida saqlandi', composerKeyboard(ctx));
 });
 
@@ -1820,53 +1780,67 @@ bot.action('preview', async (ctx) => {
 
 bot.action('publish', async (ctx) => {
   await ctx.answerCbQuery();
-  const { selectedChannel, selectedChannels, post } = ctx.session;
-  if (ctx.session.broadcast) {
-    if (!postHasContent(post)) return ctx.reply('Broadcast mazmuni topilmadi.');
-    const sent = await broadcastPost(ctx, { ...post, finalButtons: ctx.session.previewButtons });
+  const sessionState = ctx.session;
+  if (sessionState.publishing) return ctx.reply('Post yuborilmoqda. Iltimos, kuting.');
+  sessionState.publishing = true;
+
+  try {
+    const { selectedChannel, selectedChannels, post } = sessionState;
+    if (sessionState.broadcast) {
+      if (!postHasContent(post)) return ctx.reply('Broadcast mazmuni topilmadi.');
+      const sent = await broadcastPost(ctx, { ...post, finalButtons: sessionState.previewButtons });
+      reset(ctx);
+      return ctx.reply(`Broadcast ${sent} ta chatga yuborildi.`, mainKeyboard(ctx));
+    }
+
+    const channels = selectedChannels?.length ? selectedChannels : selectedChannel ? [selectedChannel] : [];
+    if (!channels.length || !postHasContent(post)) return ctx.reply('Post ma\'lumotlari topilmadi.');
+
+    const chargeResult = await chargeForPostIfNeeded(ctx);
+    if (!chargeResult.ok) return ctx.reply(chargeResult.message, mainKeyboard(ctx));
+
+    const buttons = sessionState.previewButtons || postButtons(post);
+    const replyMarkup = postReplyMarkup(buttons);
+    const results = await Promise.allSettled(
+      channels.map((channel) => sendPostToChat(ctx, channel.id, post, replyMarkup))
+    );
+    const sentChannels = channels.filter((channel, index) => results[index].status === 'fulfilled');
+    for (const result of results.filter((item) => item.status === 'rejected')) {
+      console.error('Post send failed:', result.reason?.response?.description || result.reason?.message);
+    }
+    if (!sentChannels.length) {
+      const account = userData(ctx.from.id);
+      account.postLog = account.postLog.filter((timestamp) => timestamp !== chargeResult.chargedAt);
+      return ctx.reply('Postni hech qaysi kanalga yuborib bo\'lmadi. Kanal ruxsatlarini tekshiring.', mainKeyboard(ctx));
+    }
+
+    const publishedAt = new Date();
+    const statEntry = {
+      publishedAt,
+      channelIds: sentChannels.map((channel) => channel.id),
+      channelCount: sentChannels.length,
+      mediaType: post.mediaType || (post.photo ? 'photo' : 'text')
+    };
+    const updatedAccount = await User.findOneAndUpdate(
+      { telegramId: Number(ctx.from.id) },
+      {
+        $inc: { publishedPosts: 1, publishedChannels: sentChannels.length },
+        $set: { lastPublishedAt: publishedAt },
+        $push: {
+          postStats: { $each: [statEntry], $slice: -100 },
+          postLog: { $each: [chargeResult.chargedAt], $slice: -100 }
+        }
+      },
+      { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true }
+    ).lean();
+    data.users[String(ctx.from.id)] = accountFromMongo(updatedAccount);
+    data.stats.postsSent += sentChannels.length;
+    await saveData([], true);
     reset(ctx);
-    return ctx.reply(`Broadcast ${sent} ta chatga yuborildi.`, mainKeyboard(ctx));
+    return ctx.reply(`Post ${sentChannels.length} ta kanalga muvaffaqiyatli yuborildi.`, mainKeyboard(ctx));
+  } finally {
+    if (ctx.session === sessionState) delete sessionState.publishing;
   }
-  const channels = selectedChannels?.length ? selectedChannels : selectedChannel ? [selectedChannel] : [];
-  if (!channels.length || !postHasContent(post)) return ctx.reply('Post ma\'lumotlari topilmadi.');
-
-  const chargeResult = await chargeForPostIfNeeded(ctx);
-  if (!chargeResult.ok) return ctx.reply(chargeResult.message, mainKeyboard(ctx));
-
-  const buttons = ctx.session.previewButtons || postButtons(post);
-  const replyMarkup = Markup.inlineKeyboard(buttons).reply_markup;
-  const results = await Promise.allSettled(
-    channels.map((channel) => sendPostToChat(ctx, channel.id, post, replyMarkup))
-  );
-  const sentChannels = channels.filter((channel, index) => results[index].status === 'fulfilled');
-  for (const result of results.filter((item) => item.status === 'rejected')) {
-    console.error('Post send failed:', result.reason?.response?.description || result.reason?.message);
-  }
-  if (!sentChannels.length) {
-    return ctx.reply('Postni hech qaysi kanalga yuborib bo\'lmadi. Kanal ruxsatlarini tekshiring.', mainKeyboard(ctx));
-  }
-  const account = userData(ctx.from.id);
-  const publishedAt = new Date();
-  const statEntry = {
-    publishedAt,
-    channelIds: sentChannels.map((channel) => channel.id),
-    channelCount: sentChannels.length,
-    mediaType: post.mediaType || (post.photo ? 'photo' : 'text')
-  };
-  const updatedAccount = await User.findOneAndUpdate(
-    { telegramId: Number(ctx.from.id) },
-    {
-      $inc: { publishedPosts: 1, publishedChannels: sentChannels.length },
-      $set: { lastPublishedAt: publishedAt },
-      $push: { postStats: { $each: [statEntry], $slice: -100 } }
-    },
-    { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true }
-  ).lean();
-  data.users[String(ctx.from.id)] = accountFromMongo(updatedAccount);
-  data.stats.postsSent += sentChannels.length;
-  await saveData();
-  reset(ctx);
-  return ctx.reply(`Post ${sentChannels.length} ta kanalga muvaffaqiyatli yuborildi.`, mainKeyboard(ctx));
 });
 
 bot.action('cancel', async (ctx) => {
@@ -1893,7 +1867,7 @@ bot.on('message', async (ctx, next) => {
       return ctx.reply('Bepul tarifda faqat bitta kanal yoki guruh ulash mumkin. Premium tarifni tanlang.', mainKeyboard(ctx));
     }
     account.channels.push(channel);
-    await saveData();
+    await saveData([ctx.from.id], false);
     reset(ctx);
     return ctx.reply(`${channel.title} chat ro‘yxatingizga qo‘shildi.`, mainKeyboard(ctx));
   } catch (error) {
@@ -1915,7 +1889,7 @@ bot.on('text', async (ctx) => {
       return ctx.reply('Karta raqami noto\'g\'ri formatda. Masalan: 9860 0803 9258 5933', adminKeyboard(ctx));
     }
     data.settings.premiumCardNumber = cardNumber;
-    saveData();
+    await saveData([], true);
     reset(ctx);
     return ctx.reply(`Premium karta raqami yangilandi: ${cardNumber}`, adminKeyboard(ctx));
   }
@@ -1927,7 +1901,7 @@ bot.on('text', async (ctx) => {
       return ctx.reply('Premium narxini faqat musbat son ko\'rinishida kiriting.', adminKeyboard(ctx));
     }
     data.settings.premiumPrice = price;
-    saveData();
+    await saveData([], true);
     reset(ctx);
     return ctx.reply(`Premium narxi yangilandi: ${price} so'm`, adminKeyboard(ctx));
   }
@@ -1946,7 +1920,7 @@ bot.on('text', async (ctx) => {
         { $set: { channels: data.settings.requiredChannels, 'settings.requiredChannels': data.settings.requiredChannels, 'settings.requiredChannel': channel } },
         { upsert: true, returnDocument: 'after' }
       );
-      saveData();
+      await saveData([], true);
       reset(ctx);
       return ctx.reply(`${channel.title} majburiy obuna kanali qilib sozlandi.`, adminKeyboard(ctx));
     } catch (error) {
@@ -1955,14 +1929,18 @@ bot.on('text', async (ctx) => {
   }
 
   if (sessionState.step === 'channel') {
+    if (trimmedText === 'Bekor qilish') {
+      reset(ctx);
+      return ctx.reply('Amal bekor qilindi.', mainKeyboard(ctx));
+    }
     try {
       const channel = await checkChannelPostingAccess(ctx, normalizeChannel(trimmedText));
       const account = userData(ctx.from.id);
       if (!account.premium && account.channels.length >= 1) {
-        return ctx.reply(`${tr(ctx, 'Limit tugadi. Premium ta`rifni sotib oling!')}`, { parse_mode: 'HTML', reply_markup: mainKeyboard(ctx) });
+        return ctx.reply('Limit tugadi. Premium tarifni sotib oling!', mainKeyboard(ctx));
       }
       if (!account.channels.some((item) => item.id === channel.id)) account.channels.push(channel);
-      saveData();
+      await saveData([ctx.from.id], false);
       reset(ctx);
       return ctx.reply(`${channel.title} kanal ro\'yxatingizga qo\'shildi.`, mainKeyboard(ctx));
     } catch (error) {
@@ -2044,7 +2022,7 @@ bot.catch((error, ctx) => {
 
 async function setupBotAbout() {
   try {
-    const aboutText = `Kanallar uchun tugmali postlar yaratish boti.\nБот для создания постов с кнопками для каналов.\nAdmin: @admn28`;
+    const aboutText = `Kanallar uchun tugmali postlar yaratish boti.\nБот для создания постов с кнопками для каналов.`;
     await bot.telegram.setMyShortDescription(aboutText);
     console.log("Botning 'About' qismi muvaffaqiyatli yangilandi!");
   } catch (error) {
@@ -2187,6 +2165,15 @@ app.post('/api/mini-app/premium/request', async (req, res) => {
   }
 });
 
+app.use('/api/mini-app', (error, req, res, next) => {
+  if (res.headersSent) return next(error);
+  if (error instanceof SyntaxError && error.status === 400 && 'body' in error) {
+    return res.status(400).json({ error: 'So‘rov JSON formati noto‘g‘ri.' });
+  }
+  console.error('Mini App middleware failed:', error);
+  return res.status(500).json({ error: 'Serverda xatolik yuz berdi.' });
+});
+
 let pollingLeaseTimer;
 let leaseRenewalRunning = false;
 let shutdownRequested = false;
@@ -2268,9 +2255,14 @@ function shutdown(signal) {
   shutdownRequested = true;
   clearInterval(pollingLeaseTimer);
   bot.stop(signal);
-  server.close();
 
   shutdownPromise = (async () => {
+    await new Promise((resolve) => {
+      server.close((error) => {
+        if (error) console.error('HTTP server shutdown failed:', error);
+        resolve();
+      });
+    });
     try {
       const result = await BotConfig.updateOne({
         configKey: POLLING_LEASE_KEY,

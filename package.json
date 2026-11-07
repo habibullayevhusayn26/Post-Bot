@@ -9,7 +9,7 @@
     "test": "node --check app.js && node --check mini-app.js && node --check channel.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.19.0"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

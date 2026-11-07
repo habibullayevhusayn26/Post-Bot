@@ -353,6 +353,12 @@ function isButtonStyleError(error) {
     /button[_\s].{0,30}style|style[_\s].{0,30}button|reply keyboard button|inline keyboard button/i.test(description);
 }
 
+function getTelegramPayloadFallback(error, payload) {
+  if (isCustomEmojiError(error)) return removePremiumEmoji(payload);
+  if (isButtonStyleError(error)) return removeButtonStyles(payload);
+  return null;
+}
+
 const token = process.env.BOT_TOKEN;
 if (!token) {
   throw new Error('BOT_TOKEN is missing. Copy .env.example to .env and add the token.');
@@ -361,22 +367,22 @@ if (!token) {
 const bot = new Telegraf(token);
 const originalTelegramCallApi = bot.telegram.callApi.bind(bot.telegram);
 bot.telegram.callApi = async (method, payload, options) => {
-  const decoratedPayload = decorateTelegramPayload(method, payload);
-  try {
-    return await originalTelegramCallApi(method, decoratedPayload, options);
-  } catch (error) {
-    if (!isCustomEmojiError(error) && !isButtonStyleError(error)) throw error;
-    const emojiFallback = removePremiumEmoji(decoratedPayload);
-    const fallbackPayload = emojiFallback
-      ? removeButtonStyles(emojiFallback) || emojiFallback
-      : removeButtonStyles(decoratedPayload);
-    if (!fallbackPayload) throw error;
-    console.warn(
-      'Telegram rejected premium emoji or button styling; retrying with standard emoji and compatible buttons.',
-      error.response?.description || error.message
-    );
-    return originalTelegramCallApi(method, fallbackPayload, options);
+  let candidate = decorateTelegramPayload(method, payload);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await originalTelegramCallApi(method, candidate, options);
+    } catch (error) {
+      if (attempt === 2) throw error;
+      const fallback = getTelegramPayloadFallback(error, candidate);
+      if (!fallback) throw error;
+      candidate = fallback;
+      console.warn(
+        'Telegram rejected premium emoji or button styling; retrying with compatible formatting.',
+        error.response?.description || error.message
+      );
+    }
   }
+  throw new Error('Telegram request exhausted its formatting fallbacks.');
 };
 const BOT_TIMEZONE = 'Asia/Tashkent';
 

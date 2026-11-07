@@ -10,7 +10,7 @@ assert.notEqual(helperStart, -1, 'emoji implementation must remain in bot.js');
 assert.notEqual(helperEnd, -1, 'emoji implementation must be before bot startup');
 const helperModule = { exports: {} };
 vm.runInNewContext(
-  `${botSource.slice(helperStart, helperEnd)}\nmodule.exports = { EMOJIS, decorateReplyMarkup, decorateTelegramPayload, getEmojiForText, isButtonStyleError, isCustomEmojiError, removeButtonStyles, removePremiumEmoji };`,
+  `${botSource.slice(helperStart, helperEnd)}\nmodule.exports = { EMOJIS, decorateReplyMarkup, decorateTelegramPayload, getEmojiForText, getTelegramPayloadFallback, getButtonStyle, isButtonStyleError, isCustomEmojiError, removeButtonStyles, removePremiumEmoji };`,
   { module: helperModule }
 );
 const {
@@ -18,6 +18,8 @@ const {
   decorateReplyMarkup,
   decorateTelegramPayload,
   getEmojiForText,
+  getTelegramPayloadFallback,
+  getButtonStyle,
   isButtonStyleError,
   isCustomEmojiError,
   removeButtonStyles,
@@ -49,6 +51,16 @@ test('adds premium emoji icons and Telegram button colors to inline and reply ke
       '❓ Yordam',
       '⚙️ Sozlamalar'
     ]]
+  });
+
+  test('assigns visible colors to the bot main-menu buttons', () => {
+    assert.equal(getButtonStyle('Post yaratish'), 'success');
+    assert.equal(getButtonStyle('Kanallarim'), 'primary');
+    assert.equal(getButtonStyle('Post statistikasi'), 'primary');
+    assert.equal(getButtonStyle('Profilim'), 'primary');
+    assert.equal(getButtonStyle('Premium'), 'success');
+    assert.equal(getButtonStyle('Yordam'), 'primary');
+    assert.equal(getButtonStyle('Sozlamalar'), 'primary');
   });
 
   assert.equal(decorated.inline_keyboard[0][0].text, 'Postni tasdiqlash');
@@ -123,7 +135,7 @@ test('adds premium emoji to a regular greeting message sent by the bot', () => {
 });
 
 test('bot sends every Telegram payload through the in-file emoji decorator', () => {
-  assert.match(botSource, /const decoratedPayload = decorateTelegramPayload\(method, payload\)/);
+  assert.match(botSource, /let candidate = decorateTelegramPayload\(method, payload\)/);
 });
 
 test('prefixes HTML captions without changing HTML parse mode', () => {
@@ -185,6 +197,21 @@ test('removes unsupported button styles while preserving button text and callbac
   assert.equal(compatible.reply_markup.inline_keyboard[0][0].text, '❌ Bekor qilish');
   assert.equal(compatible.reply_markup.inline_keyboard[0][0].callback_data, 'cancel');
   assert.equal(compatible.reply_markup.inline_keyboard[0][0].style, undefined);
+});
+
+test('keeps menu button colors when Telegram rejects only the premium emoji icons', () => {
+  const decorated = decorateTelegramPayload('sendMessage', {
+    text: 'Xush kelibsiz',
+    reply_markup: { keyboard: [['Profilim']] }
+  });
+  const fallback = getTelegramPayloadFallback(
+    { response: { error_code: 400, description: 'icon_custom_emoji_id is invalid' } },
+    decorated
+  );
+
+  assert.equal(fallback.reply_markup.keyboard[0][0].text, '👤 Profilim');
+  assert.equal(fallback.reply_markup.keyboard[0][0].style, 'primary');
+  assert.equal(fallback.reply_markup.keyboard[0][0].icon_custom_emoji_id, undefined);
 });
 
 test('recognizes Telegram errors caused by unavailable custom emoji', () => {

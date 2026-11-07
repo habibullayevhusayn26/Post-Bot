@@ -230,14 +230,6 @@ const keyboardTranslations = {
   ko: { 'Kanal qo\'shish': '채널 추가', 'Post yaratish': '게시물 만들기', 'Kanalni o\'chirish': '채널 삭제', 'Orqaga': '뒤로', 'Havolali tugma qo\'shish': 'URL 버튼 추가', 'Postni yuborish': '게시물 게시', 'Bekor qilish': '취소', 'Ko\'k': '파란색', 'Yashil': '초록색', 'Qizil': '빨간색', 'Statistika': '통계', 'Barchaga post yuborish': '전체 방송', 'Majburiy obunani sozlash': '필수 구독 설정', 'Majburiy obunani o\'chirish': '필수 구독 해제', 'Kanalga obuna bo\'lish': '채널 구독', 'Obunani tekshirish': '구독 확인' },
   tg: { 'Kanal qo\'shish': 'Иловаи канал', 'Post yaratish': 'Эҷоди пост', 'Kanalni o\'chirish': 'Нест кардани канал', 'Orqaga': 'Бозгашт', 'Havolali tugma qo\'shish': 'Иловаи тугмаи пайванд', 'Postni yuborish': 'Нашри пост', 'Bekor qilish': 'Бекор кардан', 'Ko\'k': 'Кабуд', 'Yashil': 'Сабз', 'Qizil': 'Сурх', 'Statistika': 'Омори', 'Barchaga post yuborish': 'Ирсол ба ҳама', 'Majburiy obunani sozlash': 'Танзими обуна', 'Majburiy obunani o\'chirish': 'Хомӯш кардани обуна', 'Kanalga obuna bo\'lish': 'Обуна ба канал', 'Obunani tekshirish': 'Санҷиши обуна' }
 };
-const previewLabels = {
-  uz: ['Ko\'rib chiqish', 'Tasdiqlash'], en: ['Preview', 'Confirm'], ru: ['Предпросмотр', 'Подтвердить'],
-  tr: ['Önizleme', 'Onayla'], ar: ['معاينة', 'تأكيد'], zh: ['预览', '确认'], ko: ['미리보기', '확인'], tg: ['Пешнамоиш', 'Тасдиқ']
-};
-for (const [language, labels] of Object.entries(previewLabels)) {
-  keyboardTranslations[language]['Preview'] = labels[0];
-  keyboardTranslations[language]['Tasdiqlash'] = labels[1];
-}
 function localizeReply(ctx, message) {
   return message;
 }

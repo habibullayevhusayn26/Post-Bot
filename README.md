@@ -37,7 +37,7 @@ Yangi kod deploy bo‘lgach botga `/start` yuboring: asosiy menyuda foydalanuvch
 
 Bot va Mini App faqat o‘zbek tilida ishlaydi; til tanlash funksiyasi mavjud emas.
 
-Bot xabarlari va klaviatura tugmalarida Telegram premium custom emoji’lar ishlatiladi. Telegram custom emoji’ni qabul qilmasa, bot xabar va tugmalarni oddiy emoji bilan qayta yuboradi. Premium custom emoji ishlashi uchun bot qo‘shimcha username’ni Fragment’dan olgan bo‘lishi yoki bot egasi Premium obunaga ega bo‘lib, bot private, group yoki supergroup chatiga yuborishi kerak.
+Bot xabarlari va klaviatura tugmalarida Telegram premium custom emoji’lar ishlatiladi. Oddiy matn va izohlarga emoji HTML formatida qo‘shiladi; Telegram custom emoji’ni qabul qilmasa, bot oddiy emoji bilan qayta yuboradi. Tugmalarga Telegram Bot API’dagi `icon_custom_emoji_id` va ko‘k (`primary`), yashil (`success`), qizil (`danger`) rang uslublari qo‘llanadi. Premium custom emoji ishlashi uchun bot Fragment’dan qo‘shimcha username olgan bo‘lishi yoki bot egasi Premium obunaga ega bo‘lib, bot shaxsiy, guruh yoki superguruh chatiga yuborishi kerak.
 
 Asosiy menyudagi **Post yaratish** tugmasi post yuboriladigan kanalni tanlaydi. **Kanallarim** kanal qo‘shish, kanallarni boshqarish yoki o‘chirish uchun ishlatiladi. Admin menyusi va `/admin` buyrug‘i faqat bot adminiga ko‘rinadi.
 

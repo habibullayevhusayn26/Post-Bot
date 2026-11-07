@@ -32,6 +32,8 @@ const CUSTOM_EMOJI_IDS = new Set(Object.values(EMOJIS).map(({ id }) => id));
 
 function getEmojiForText(value) {
   const label = String(value || '').replace(/<[^>]*>/g, '').toLocaleLowerCase();
+  const visibleEmoji = Object.values(EMOJIS).find(({ emoji }) => label.includes(emoji));
+  if (visibleEmoji) return visibleEmoji;
   const matches = (terms) => terms.some((term) => label.includes(term));
 
   if (matches(['🔵', 'ko‘k', "ko'k", 'blue'])) return EMOJIS.blue;
@@ -63,22 +65,40 @@ function getEmojiForText(value) {
 
 function decorateButton(button) {
   if (typeof button === 'string') {
-    return prefixButtonEmoji(button);
+    return decorateButton({ text: button });
   }
   if (!button || typeof button !== 'object' || typeof button.text !== 'string') return button;
-  const decorated = { ...button, text: prefixButtonEmoji(button.text) };
-  if (CUSTOM_EMOJI_IDS.has(String(decorated.icon_custom_emoji_id))) {
-    delete decorated.icon_custom_emoji_id;
-  }
+  const existingEmoji = Object.values(EMOJIS).find(({ emoji }) =>
+    button.text.startsWith(`${emoji} `) || button.text === emoji
+  );
+  const emoji = existingEmoji || getEmojiForText(button.text);
+  const text = existingEmoji
+    ? button.text.slice(existingEmoji.emoji.length).trimStart()
+    : button.text;
+  const decorated = {
+    ...button,
+    text,
+    icon_custom_emoji_id: button.icon_custom_emoji_id || emoji.id,
+    style: ['primary', 'success', 'danger'].includes(button.style)
+      ? button.style
+      : getButtonStyle(text)
+  };
   return decorated;
 }
 
-function prefixButtonEmoji(text) {
-  const emoji = getEmojiForText(text);
-  if (Object.values(EMOJIS).some(({ emoji: knownEmoji }) => text.startsWith(knownEmoji))) {
-    return text;
+function getButtonStyle(value) {
+  const label = String(value || '').replace(/<[^>]*>/g, '').toLocaleLowerCase();
+  const matches = (terms) => terms.some((term) => label.includes(term));
+  if (matches(['🔴', 'qizil', 'red'])) return 'danger';
+  if (matches(['🟢', 'yashil', 'green'])) return 'success';
+  if (matches(['🔵', 'ko‘k', "ko'k", 'blue'])) return 'primary';
+  if (matches(['bekor', 'o‘chir', "o'chir", 'rad et', 'rad qil', 'delete', 'remove', 'reject'])) {
+    return 'danger';
   }
-  return `${emoji.emoji} ${text}`;
+  if (matches(['tasdiq', 'muvaffaqiyat', 'yubor', 'jo‘nat', "jo'nat", 'publish', 'send', 'qo‘sh', "qo'sh", 'approve', 'confirm', 'saqla'])) {
+    return 'success';
+  }
+  return 'primary';
 }
 
 function decorateReplyMarkup(replyMarkup) {
@@ -107,6 +127,16 @@ function hasOurEmojiPrefix(text, parseMode, entities) {
   ) || false;
 }
 
+function escapeHtml(value) {
+  return value.replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[char]);
+}
+
 function prefixCustomEmoji(text, payload, entityKey, parseModeKey) {
   if (typeof text !== 'string' || !text) return text;
   const entities = payload[entityKey];
@@ -125,6 +155,11 @@ function prefixCustomEmoji(text, payload, entityKey, parseModeKey) {
     return `![](tg://emoji?id=${emoji.id}) ${text}`;
   }
   if (parseMode) return `${emoji.emoji} ${text}`;
+
+  if (!Array.isArray(entities) || entities.length === 0) {
+    payload[parseModeKey] = 'HTML';
+    return `<tg-emoji emoji-id="${emoji.id}">${emoji.emoji}</tg-emoji> ${escapeHtml(text)}`;
+  }
 
   payload[entityKey] = [
     { type: 'custom_emoji', offset: 0, length: emoji.emoji.length, custom_emoji_id: emoji.id },

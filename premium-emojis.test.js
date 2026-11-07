@@ -22,17 +22,36 @@ test('chooses a matching emoji for Uzbek labels and falls back to a message emoj
   assert.equal(getEmojiForText('Noma’lum amal').id, EMOJIS.message.id);
 });
 
-test('adds visible standard emoji to inline and reply keyboard button labels', () => {
+test('adds premium emoji icons and Telegram button colors to inline and reply keyboards', () => {
   const decorated = decorateReplyMarkup({
     inline_keyboard: [[{ text: 'Postni tasdiqlash', callback_data: 'publish' }]],
     keyboard: [['Profilim', { text: 'Mini App', web_app: { url: 'https://example.com' } }]]
   });
 
-  assert.equal(decorated.inline_keyboard[0][0].text, '✅ Postni tasdiqlash');
-  assert.equal(decorated.keyboard[0][0], '👤 Profilim');
-  assert.equal(decorated.keyboard[0][1].text, '💬 Mini App');
-  assert.equal(decorated.inline_keyboard[0][0].icon_custom_emoji_id, undefined);
-  assert.equal(decorated.keyboard[0][1].icon_custom_emoji_id, undefined);
+  assert.equal(decorated.inline_keyboard[0][0].text, 'Postni tasdiqlash');
+  assert.equal(decorated.inline_keyboard[0][0].icon_custom_emoji_id, EMOJIS.done.id);
+  assert.equal(decorated.inline_keyboard[0][0].style, 'success');
+  assert.equal(decorated.keyboard[0][0].text, 'Profilim');
+  assert.equal(decorated.keyboard[0][0].icon_custom_emoji_id, EMOJIS.user.id);
+  assert.equal(decorated.keyboard[0][0].style, 'primary');
+  assert.equal(decorated.keyboard[0][1].icon_custom_emoji_id, EMOJIS.message.id);
+  assert.equal(decorated.keyboard[0][1].style, 'primary');
+});
+
+test('maps destructive and user-selected button colors to Telegram styles', () => {
+  const decorated = decorateReplyMarkup({
+    inline_keyboard: [[
+      { text: '❌ Bekor qilish', callback_data: 'cancel' },
+      { text: 'Yashil', callback_data: 'green', style: 'success' },
+      { text: 'Saqlash', callback_data: 'save', style: 'danger' }
+    ]]
+  });
+
+  assert.equal(decorated.inline_keyboard[0][0].text, 'Bekor qilish');
+  assert.equal(decorated.inline_keyboard[0][0].icon_custom_emoji_id, EMOJIS.cancel.id);
+  assert.equal(decorated.inline_keyboard[0][0].style, 'danger');
+  assert.equal(decorated.inline_keyboard[0][1].style, 'success');
+  assert.equal(decorated.inline_keyboard[0][2].style, 'danger');
 });
 
 test('prefixes plain text with a custom emoji entity and shifts existing entity offsets', () => {
@@ -46,6 +65,19 @@ test('prefixes plain text with a custom emoji entity and shifts existing entity 
     { type: 'custom_emoji', offset: 0, length: 2, custom_emoji_id: EMOJIS.stats.id },
     { type: 'bold', offset: 3, length: 10 }
   ]);
+});
+
+test('formats plain outgoing messages as HTML and escapes message text', () => {
+  const decorated = decorateTelegramPayload('sendMessage', {
+    text: 'Matn <maxsus> & oddiy'
+  });
+
+  assert.equal(decorated.parse_mode, 'HTML');
+  assert.equal(
+    decorated.text,
+    `<tg-emoji emoji-id="${EMOJIS.write.id}">✍️</tg-emoji> Matn &lt;maxsus&gt; &amp; oddiy`
+  );
+  assert.equal(removePremiumEmoji(decorated).text, '✍️ Matn &lt;maxsus&gt; &amp; oddiy');
 });
 
 test('prefixes HTML captions without changing HTML parse mode', () => {
@@ -85,8 +117,10 @@ test('keeps visible standard emoji labels without relying on premium button icon
   });
   const fallback = removePremiumEmoji(decorated);
 
-  assert.equal(fallback.reply_markup.keyboard[0][0], '👤 Profilim');
+  assert.equal(fallback.reply_markup.keyboard[0][0].text, '👤 Profilim');
+  assert.equal(fallback.reply_markup.keyboard[0][0].style, 'primary');
   assert.equal(fallback.reply_markup.inline_keyboard[0][0].text, '📊 Statistika');
+  assert.equal(fallback.reply_markup.inline_keyboard[0][0].style, 'primary');
   assert.equal(fallback.reply_markup.inline_keyboard[0][0].icon_custom_emoji_id, undefined);
 });
 

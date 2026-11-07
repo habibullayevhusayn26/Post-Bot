@@ -153,14 +153,14 @@ function getButtonStyle(value) {
   const label = String(value || '').replace(/<[^>]*>/g, '').toLocaleLowerCase();
   const matches = (terms) => terms.some((term) => label.includes(term));
   if (matches(['🔴', 'qizil', 'red', 'bekor', 'o‘chir', "o'chir", 'rad et', 'rad qil', 'delete', 'remove', 'reject'])) {
-    return 'danger';
+    return { bg_danger: true };
   }
-  if (matches(['🟢', 'yashil', 'green'])) return 'success';
-  if (matches(['🔵', 'ko‘k', "ko'k", 'blue'])) return 'primary';
+  if (matches(['🟢', 'yashil', 'green'])) return { bg_success: true };
+  if (matches(['🔵', 'ko‘k', "ko'k", 'blue'])) return { bg_primary: true };
   if (matches(['premium', 'post yarat', 'tasdiq', 'yubor', 'jo‘nat', "jo'nat", 'publish', 'send', 'qo‘sh', "qo'sh", 'approve', 'confirm', 'saqla'])) {
-    return 'success';
+    return { bg_success: true };
   }
-  return 'primary';
+  return { bg_primary: true };
 }
 
 function decorateButton(button) {
@@ -170,13 +170,20 @@ function decorateButton(button) {
     button.text.startsWith(`${emoji} `) || button.text === emoji
   );
   const emoji = existingEmoji || getEmojiForText(button.text);
+  const legacyStyles = {
+    primary: { bg_primary: true },
+    success: { bg_success: true },
+    danger: { bg_danger: true }
+  };
+  const buttonStyle = button.button_style ||
+    legacyStyles[button.style] ||
+    getButtonStyle(button.text);
+  const { style, ...buttonWithoutLegacyStyle } = button;
   return {
-    ...button,
+    ...buttonWithoutLegacyStyle,
     text: existingEmoji ? button.text.slice(existingEmoji.emoji.length).trimStart() : button.text,
     icon_custom_emoji_id: button.icon_custom_emoji_id || emoji.id,
-    style: ['primary', 'success', 'danger'].includes(button.style)
-      ? button.style
-      : getButtonStyle(button.text)
+    button_style: buttonStyle
   };
 }
 
@@ -331,8 +338,8 @@ function removeButtonStyles(payload) {
   for (const key of ['keyboard', 'inline_keyboard']) {
     if (!Array.isArray(replyMarkup[key])) continue;
     replyMarkup[key] = replyMarkup[key].map((row) => row.map((button) => {
-      if (!button || typeof button !== 'object' || !button.style) return button;
-      const { style, ...fallbackButton } = button;
+      if (!button || typeof button !== 'object' || (!button.style && !button.button_style)) return button;
+      const { style, button_style, ...fallbackButton } = button;
       changed = true;
       return fallbackButton;
     }));

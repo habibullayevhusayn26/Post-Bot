@@ -53,34 +53,34 @@ test('adds premium emoji icons and Telegram button colors to inline and reply ke
     ]]
   });
 
-  test('assigns visible colors to the bot main-menu buttons', () => {
-    assert.equal(getButtonStyle('Post yaratish'), 'success');
-    assert.equal(getButtonStyle('Kanallarim'), 'primary');
-    assert.equal(getButtonStyle('Post statistikasi'), 'primary');
-    assert.equal(getButtonStyle('Profilim'), 'primary');
-    assert.equal(getButtonStyle('Premium'), 'success');
-    assert.equal(getButtonStyle('Yordam'), 'primary');
-    assert.equal(getButtonStyle('Sozlamalar'), 'primary');
-  });
-
   assert.equal(decorated.inline_keyboard[0][0].text, 'Postni tasdiqlash');
   assert.equal(decorated.inline_keyboard[0][0].icon_custom_emoji_id, EMOJIS.done.id);
-  assert.equal(decorated.inline_keyboard[0][0].style, 'success');
+  assert.deepEqual(JSON.parse(JSON.stringify(decorated.inline_keyboard[0][0].button_style)), { bg_success: true });
   assert.equal(decorated.keyboard[0][0].text, 'Post yaratish');
   assert.equal(decorated.keyboard[0][0].icon_custom_emoji_id, EMOJIS.write.id);
-  assert.equal(decorated.keyboard[0][0].style, 'success');
+  assert.deepEqual(JSON.parse(JSON.stringify(decorated.keyboard[0][0].button_style)), { bg_success: true });
   assert.equal(decorated.keyboard[0][1].icon_custom_emoji_id, EMOJIS.announce.id);
-  assert.equal(decorated.keyboard[0][1].style, 'primary');
+  assert.deepEqual(JSON.parse(JSON.stringify(decorated.keyboard[0][1].button_style)), { bg_primary: true });
   assert.equal(decorated.keyboard[0][2].icon_custom_emoji_id, EMOJIS.stats.id);
-  assert.equal(decorated.keyboard[0][2].style, 'primary');
+  assert.deepEqual(JSON.parse(JSON.stringify(decorated.keyboard[0][2].button_style)), { bg_primary: true });
   assert.equal(decorated.keyboard[0][3].icon_custom_emoji_id, EMOJIS.user.id);
-  assert.equal(decorated.keyboard[0][3].style, 'primary');
+  assert.deepEqual(JSON.parse(JSON.stringify(decorated.keyboard[0][3].button_style)), { bg_primary: true });
   assert.equal(decorated.keyboard[0][4].icon_custom_emoji_id, EMOJIS.premium.id);
-  assert.equal(decorated.keyboard[0][4].style, 'success');
+  assert.deepEqual(JSON.parse(JSON.stringify(decorated.keyboard[0][4].button_style)), { bg_success: true });
   assert.equal(decorated.keyboard[0][5].icon_custom_emoji_id, EMOJIS.help.id);
-  assert.equal(decorated.keyboard[0][5].style, 'primary');
+  assert.deepEqual(JSON.parse(JSON.stringify(decorated.keyboard[0][5].button_style)), { bg_primary: true });
   assert.equal(decorated.keyboard[0][6].icon_custom_emoji_id, EMOJIS.settings.id);
-  assert.equal(decorated.keyboard[0][6].style, 'primary');
+  assert.deepEqual(JSON.parse(JSON.stringify(decorated.keyboard[0][6].button_style)), { bg_primary: true });
+});
+
+test('assigns requested primary, danger, and success colors to menu buttons', () => {
+  assert.deepEqual(JSON.parse(JSON.stringify(getButtonStyle('Post yaratish'))), { bg_success: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(getButtonStyle('Kanallarim'))), { bg_primary: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(getButtonStyle('Post statistikasi'))), { bg_primary: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(getButtonStyle('Profilim'))), { bg_primary: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(getButtonStyle('Premium'))), { bg_success: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(getButtonStyle('Yordam'))), { bg_primary: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(getButtonStyle('Bekor qilish'))), { bg_danger: true });
 });
 
 test('maps destructive and user-selected button colors to Telegram styles', () => {
@@ -94,9 +94,9 @@ test('maps destructive and user-selected button colors to Telegram styles', () =
 
   assert.equal(decorated.inline_keyboard[0][0].text, 'Bekor qilish');
   assert.equal(decorated.inline_keyboard[0][0].icon_custom_emoji_id, EMOJIS.cancel.id);
-  assert.equal(decorated.inline_keyboard[0][0].style, 'danger');
-  assert.equal(decorated.inline_keyboard[0][1].style, 'success');
-  assert.equal(decorated.inline_keyboard[0][2].style, 'danger');
+  assert.deepEqual(JSON.parse(JSON.stringify(decorated.inline_keyboard[0][0].button_style)), { bg_danger: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(decorated.inline_keyboard[0][1].button_style)), { bg_success: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(decorated.inline_keyboard[0][2].button_style)), { bg_danger: true });
 });
 
 test('prefixes plain text with a custom emoji entity and shifts existing entity offsets', () => {
@@ -176,9 +176,9 @@ test('keeps visible standard emoji labels without relying on premium button icon
   const fallback = removePremiumEmoji(decorated);
 
   assert.equal(fallback.reply_markup.keyboard[0][0].text, '👤 Profilim');
-  assert.equal(fallback.reply_markup.keyboard[0][0].style, 'primary');
+  assert.deepEqual(JSON.parse(JSON.stringify(fallback.reply_markup.keyboard[0][0].button_style)), { bg_primary: true });
   assert.equal(fallback.reply_markup.inline_keyboard[0][0].text, '📊 Statistika');
-  assert.equal(fallback.reply_markup.inline_keyboard[0][0].style, 'primary');
+  assert.deepEqual(JSON.parse(JSON.stringify(fallback.reply_markup.inline_keyboard[0][0].button_style)), { bg_primary: true });
   assert.equal(fallback.reply_markup.inline_keyboard[0][0].icon_custom_emoji_id, undefined);
 });
 
@@ -193,10 +193,10 @@ test('removes unsupported button styles while preserving button text and callbac
   const compatible = removeButtonStyles(removePremiumEmoji(decorated));
 
   assert.equal(compatible.reply_markup.keyboard[0][0].text, '👤 Profilim');
-  assert.equal(compatible.reply_markup.keyboard[0][0].style, undefined);
+  assert.equal(compatible.reply_markup.keyboard[0][0].button_style, undefined);
   assert.equal(compatible.reply_markup.inline_keyboard[0][0].text, '❌ Bekor qilish');
   assert.equal(compatible.reply_markup.inline_keyboard[0][0].callback_data, 'cancel');
-  assert.equal(compatible.reply_markup.inline_keyboard[0][0].style, undefined);
+  assert.equal(compatible.reply_markup.inline_keyboard[0][0].button_style, undefined);
 });
 
 test('keeps menu button colors when Telegram rejects only the premium emoji icons', () => {
@@ -210,7 +210,7 @@ test('keeps menu button colors when Telegram rejects only the premium emoji icon
   );
 
   assert.equal(fallback.reply_markup.keyboard[0][0].text, '👤 Profilim');
-  assert.equal(fallback.reply_markup.keyboard[0][0].style, 'primary');
+  assert.deepEqual(JSON.parse(JSON.stringify(fallback.reply_markup.keyboard[0][0].button_style)), { bg_primary: true });
   assert.equal(fallback.reply_markup.keyboard[0][0].icon_custom_emoji_id, undefined);
 });
 

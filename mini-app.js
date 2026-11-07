@@ -1,6 +1,9 @@
 const tg = window.Telegram?.WebApp;
 tg?.ready();
 tg?.expand();
+const telegramInitData = tg?.initData ||
+  new URLSearchParams(window.location.hash.slice(1)).get('tgWebAppData') ||
+  '';
 
 const $ = (selector) => document.querySelector(selector);
 const apiBase = '/api/mini-app';
@@ -55,7 +58,7 @@ async function request(path, options = {}) {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'X-Telegram-Init-Data': tg?.initData || '',
+      'X-Telegram-Init-Data': telegramInitData,
       ...(options.headers || {})
     }
   });
@@ -310,8 +313,8 @@ $('#dk').addEventListener('click', () => {
   setTheme(theme);
 });
 
-if (tg?.initData) {
+if (telegramInitData) {
   reload().catch(showError);
 } else {
-  showError(new Error('Mini App’ni Telegram ichidan oching.'));
+  showError(new Error('Telegram tasdiqlash ma’lumoti topilmadi. Mini App’ni bot tugmasi orqali qayta oching.'));
 }

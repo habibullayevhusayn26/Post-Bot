@@ -73,6 +73,21 @@ test('removes generated premium emoji metadata for an API-compatible retry', () 
   assert.equal(fallback.reply_markup.inline_keyboard[0][0].icon_custom_emoji_id, undefined);
 });
 
+test('preserves visible standard emoji labels when Telegram rejects custom button icons', () => {
+  const decorated = decorateTelegramPayload('sendMessage', {
+    text: 'Menyu',
+    reply_markup: {
+      keyboard: [['Profilim']],
+      inline_keyboard: [[{ text: 'Statistika', callback_data: 'stats' }]]
+    }
+  });
+  const fallback = removePremiumEmoji(decorated);
+
+  assert.equal(fallback.reply_markup.keyboard[0][0].text, '👤 Profilim');
+  assert.equal(fallback.reply_markup.inline_keyboard[0][0].text, '📊 Statistika');
+  assert.equal(fallback.reply_markup.inline_keyboard[0][0].icon_custom_emoji_id, undefined);
+});
+
 test('recognizes Telegram errors caused by unavailable custom emoji', () => {
   assert.equal(isCustomEmojiError({ response: { error_code: 400, description: 'icon_custom_emoji_id is invalid' } }), true);
   assert.equal(isCustomEmojiError({ response: { error_code: 403, description: 'icon_custom_emoji_id is invalid' } }), false);

@@ -150,6 +150,12 @@ function removePremiumEmoji(payload) {
           return button;
         }
         const { icon_custom_emoji_id, ...fallbackButton } = button;
+        const emoji = Object.values(EMOJIS).find(({ id }) =>
+          id === String(button.icon_custom_emoji_id)
+        );
+        if (emoji && !fallbackButton.text.startsWith(emoji.emoji)) {
+          fallbackButton.text = `${emoji.emoji} ${fallbackButton.text}`;
+        }
         changed = true;
         return fallbackButton;
       }));

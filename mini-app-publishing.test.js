@@ -23,3 +23,9 @@ test('Mini App is not exposed as a bot keyboard button or slash command', () => 
   assert.doesNotMatch(botSource, /Markup\.button\.webApp|miniAppKeyboard/);
   assert.doesNotMatch(botSource, /bot\.command\('app'|command: 'app'/);
 });
+
+test('media download feature is removed from the bot and Mini App', () => {
+  assert.doesNotMatch(botSource, /Video saqlash|media_url|downloadWithYtDlp|sendMediaFromUrl|\/api\/mini-app\/media/);
+  assert.doesNotMatch(htmlSource, /Media saqlash|mediaUrl|mediaDownload/);
+  assert.doesNotMatch(appSource, /downloadMedia|\/media(?:['"`])/);
+});

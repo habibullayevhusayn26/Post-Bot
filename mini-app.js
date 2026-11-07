@@ -269,28 +269,6 @@ async function submitReceipt() {
   }
 }
 
-async function downloadMedia() {
-  const url = $('#mediaUrl').value.trim();
-  if (!url) {
-    toast('Media havolasini kiriting.');
-    return;
-  }
-  const button = $('#mediaDownload');
-  button.disabled = true;
-  try {
-    const result = await request('/media', {
-      method: 'POST',
-      body: JSON.stringify({ url })
-    });
-    toast(result.message || 'Media bot chatiga yuborildi.');
-    $('#mediaUrl').value = '';
-  } catch (error) {
-    toast(error.message);
-  } finally {
-    button.disabled = false;
-  }
-}
-
 document.querySelectorAll('.tab').forEach((element, index) => {
   element.style.setProperty('--x', index ? '28px' : '0px');
 });

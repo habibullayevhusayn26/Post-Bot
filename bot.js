@@ -77,12 +77,10 @@ process.on('uncaughtException', (error) => {
 });
 
 const fs = require('node:fs');
-const { spawn } = require('node:child_process');
 const { Telegraf, Markup, session } = require('telegraf');
 const { verifyTelegramInitData } = require('./mini-app-auth');
 const { findPostableChannel } = require('./channel-access');
 const { buildMiniAppStatistics } = require('./mini-app-data');
-const { parseMediaUrl } = require('./media-url');
 const {
   POLLING_LEASE_KEY,
   POLLING_LEASE_RENEW_INTERVAL_MS,
@@ -166,7 +164,6 @@ const text = {
   addChannel: { uz: 'Kanal qo\'shish' },
   admin: { uz: 'Admin panel' },
   createPost: { uz: 'Post yaratish' },
-  videoSave: { uz: 'Video saqlash' },
   profile: { uz: 'Profilim' },
   botId: { uz: 'Botdagi ID' },
   telegramId: { uz: 'Telegram ID' },
@@ -422,7 +419,6 @@ const menuEmojis = {
   profile: '👤',
   premium: '💎',
   help: '❓',
-  videoSave: '📱',
   settings: '⚙️'
 };
 
@@ -435,7 +431,7 @@ function mainKeyboard(ctx) {
     [menuButton('createPost', tr(ctx, 'createPost')), menuButton('channels', tr(ctx, 'channels'))],
     [menuButton('stats', 'Post statistikasi'), menuButton('profile', tr(ctx, 'profile'))],
     [menuButton('premium', 'Premium'), menuButton('help', 'Yordam')],
-    [menuButton('videoSave', 'Video saqlash'), menuButton('settings', 'Sozlamalar')]
+    [menuButton('settings', 'Sozlamalar')]
   ];
   if (isAdmin(ctx)) keyboard.push([tr(ctx, 'admin')]);
   return Markup.keyboard(keyboard).resize();
@@ -723,70 +719,6 @@ async function sendPreview(ctx) {
   return ctx.reply('Preview tayyor. Yuborishni tasdiqlaysizmi?', confirmationKeyboard(ctx));
 }
 
-function downloadWithYtDlp(output, url) {
-  return new Promise((resolve, reject) => {
-    const child = spawn('yt-dlp', [
-      '--no-playlist',
-      '--max-filesize', '100M',
-      '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-      '-o', output,
-      url
-    ], { windowsHide: true });
-    let errorOutput = '';
-    const timeout = setTimeout(() => {
-      child.kill();
-      reject(new Error('yt-dlp timeout'));
-    }, 120000);
-    child.stderr?.on('data', (chunk) => {
-      errorOutput += chunk.toString();
-    });
-    child.once('error', (error) => {
-      clearTimeout(timeout);
-      reject(error);
-    });
-    child.once('close', (code) => {
-      clearTimeout(timeout);
-      if (code === 0 && fs.existsSync(output)) return resolve(output);
-      reject(new Error(errorOutput.trim() || `yt-dlp exited with code ${code}`));
-    });
-  });
-}
-
-async function sendMediaFromUrl(ctx, url) {
-  const lower = String(url).trim().toLowerCase();
-  const botAddress = getBotPublicLink();
-  const footer = `\n\nBot manzili: ${botAddress}`;
-
-  try {
-    if (/youtube\.com|youtu\.be|instagram\.com|instagr\.am|tiktok\.com|x\.com|twitter\.com|fb\.com|facebook\.com|vk\.com|vimeo\.com/.test(lower)) {
-      const output = path.join(__dirname, 'tmp-media', `media-${Date.now()}.mp4`);
-      await fs.promises.mkdir(path.dirname(output), { recursive: true });
-      await downloadWithYtDlp(output, url);
-      try {
-        await ctx.telegram.sendVideo(ctx.chat.id, { source: fs.createReadStream(output), filename: 'media.mp4' }, { caption: footer, supports_streaming: true });
-        return ctx.reply('Video yuborildi.', mainKeyboard(ctx));
-      } finally {
-        await fs.promises.unlink(output).catch(() => {});
-      }
-    }
-
-    if (/\.(mp4|mov|m4v|webm|ogg|avi)(\?|$)/.test(lower)) {
-      await ctx.telegram.sendVideo(ctx.chat.id, url, { caption: footer, supports_streaming: true });
-      return ctx.reply('Video yuborildi.', mainKeyboard(ctx));
-    }
-
-    if (/\.(jpg|jpeg|png|gif|webp|bmp)(\?|$)/.test(lower)) {
-      await ctx.telegram.sendPhoto(ctx.chat.id, url, { caption: footer });
-      return ctx.reply('Rasm yuborildi.', mainKeyboard(ctx));
-    }
-
-    return ctx.reply('Iltimos, rasm yoki video URL yuboring.', mainKeyboard(ctx));
-  } catch (error) {
-    console.error('Media send failed:', error);
-    return ctx.reply('Media URL ni yuborishda xatolik yuz berdi.', mainKeyboard(ctx));
-  }
-}
-
 function buttonColorKeyboard(ctx) {
   return Markup.inlineKeyboard([
     [Markup.button.callback('Ko\'k', 'button_color:blue')],
@@ -816,20 +748,6 @@ function isUrl(value) {
 function normalizeChannel(value) {
   const trimmed = value.trim();
   return trimmed.startsWith('@') ? trimmed : `@${trimmed}`;
-}
-
-function normalizeBotUsername(rawValue) {
-  const value = String(rawValue || '').trim();
-  if (!value) return 'postmboefdbot';
-  if (value.startsWith('http://') || value.startsWith('https://')) {
-    return value.replace(/^https?:\/\/t\.me\//i, '').replace(/^https?:\/\/telegram\.me\//i, '').split(/[/?#]/)[0].replace(/^@/, '');
-  }
-  return value.replace(/^@/, '').split(/[/?#]/)[0];
-}
-
-function getBotPublicLink() {
-  const configured = normalizeBotUsername(process.env.BOT_USERNAME || process.env.BOT_LINK || process.env.BOT_ID || '');
-  return `https://t.me/${configured}`;
 }
 
 function normalizePersonalId(value) {
@@ -1132,10 +1050,6 @@ bot.command('channels', showChannels);
 // --- ESKI MA'LUMOTLARNI YUKLAB OLISH BUYRUG'I --
 
 bot.hears([...new Set(['Post yuborish', ...Object.values(text.createPost), ...Object.values(text.createPost).map((label) => menuButton('createPost', label))])], startPostCreation);
-bot.hears([...Object.values(text.videoSave), menuButton('videoSave', 'Video saqlash')], (ctx) => {
-  ctx.session = { step: 'media_url' };
-  return ctx.reply('Ijtimoiy tarmoqdan rasm/video URL yuboring:', Markup.removeKeyboard());
-});
 bot.hears([...new Set(['Kanallar ro\'yxati', ...Object.values(text.channels), ...Object.values(text.channels).map((label) => menuButton('channels', label))])], showChannels);
 bot.hears(Object.values(text.addChannel), (ctx) => {
   ctx.session = { step: 'channel' };
@@ -1647,12 +1561,6 @@ bot.on('text', async (ctx) => {
   const text = ctx.message.text;
   const trimmedText = text.trim();
 
-  if (sessionState.step === 'media_url') {
-    if (!isUrl(trimmedText)) return ctx.reply('Havola http:// yoki https:// bilan boshlanishi kerak. Qayta yuboring:');
-    sessionState.step = null;
-    return sendMediaFromUrl(ctx, trimmedText);
-  }
-
   if (sessionState.step === 'admin_premium_card_edit') {
     if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
     const cardNumber = trimmedText.replace(/\s+/g, ' ').trim();
@@ -1903,43 +1811,6 @@ app.post('/api/mini-app/premium/request', async (req, res) => {
     return res.status(202).json({ ok: true, message: 'To‘lov cheki adminga yuborildi. Tasdiq kutilmoqda.' });
   } catch (error) {
     return miniAppError(res, error);
-  }
-});
-
-app.post('/api/mini-app/media', async (req, res) => {
-  let output;
-  try {
-    const media = parseMediaUrl(req.body?.url);
-    if (!media) {
-      throw miniAppStatusError('Qo‘llab-quvvatlanadigan rasm, video yoki ijtimoiy tarmoq havolasini kiriting.');
-    }
-
-    const caption = `\n\nBot manzili: ${getBotPublicLink()}`;
-    if (media.type === 'social') {
-      output = path.join(__dirname, 'tmp-media', `mini-app-${crypto.randomUUID()}.mp4`);
-      await fs.promises.mkdir(path.dirname(output), { recursive: true });
-      await downloadWithYtDlp(output, media.url);
-      await bot.telegram.sendVideo(req.miniAppUser.id, {
-        source: fs.createReadStream(output),
-        filename: 'media.mp4'
-      }, { caption, supports_streaming: true });
-    } else if (media.type === 'video') {
-      await bot.telegram.sendVideo(req.miniAppUser.id, media.url, {
-        caption,
-        supports_streaming: true
-      });
-    } else {
-      await bot.telegram.sendPhoto(req.miniAppUser.id, media.url, { caption });
-    }
-    return res.json({ ok: true, message: 'Media bot chatiga yuborildi.' });
-  } catch (error) {
-    return miniAppError(res, error);
-  } finally {
-    if (output) {
-      await fs.promises.unlink(output).catch((error) => {
-        if (error.code !== 'ENOENT') console.error('Mini App media cleanup failed:', error);
-      });
-    }
   }
 });
 

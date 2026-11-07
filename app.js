@@ -303,15 +303,25 @@ function removePremiumEmoji(payload) {
   ]) {
     const text = result[textKey];
     if (typeof text !== 'string') continue;
+    const tagPattern = /<tg-emoji emoji-id="(\d+)">([^<]+)<\/tg-emoji>/g;
+    let replacedTag = false;
+    const fallbackText = text.replace(tagPattern, (tag, id, emoji) => {
+      if (!CUSTOM_EMOJI_IDS.has(id)) return tag;
+      replacedTag = true;
+      return emoji;
+    });
+    if (replacedTag) {
+      result[textKey] = fallbackText;
+      changed = true;
+    }
+
     const tagPrefix = /^<tg-emoji emoji-id="(\d+)">([^<]+)<\/tg-emoji> /.exec(text);
     const markdownPrefix = /^!\[\]\(tg:\/\/emoji\?id=(\d+)\) /.exec(text);
     const prefix = tagPrefix || markdownPrefix;
     const hasMarkupPrefix = Boolean(prefix && CUSTOM_EMOJI_IDS.has(prefix[1]));
-    if (hasMarkupPrefix) {
-      const emoji = tagPrefix
-        ? prefix[2]
-        : Object.values(EMOJIS).find(({ id }) => id === prefix[1]).emoji;
-      result[textKey] = `${emoji} ${text.slice(prefix[0].length)}`;
+    if (markdownPrefix && hasMarkupPrefix) {
+      const emoji = Object.values(EMOJIS).find(({ id }) => id === prefix[1]).emoji;
+      result[textKey] = `${emoji} ${result[textKey].slice(prefix[0].length)}`;
       changed = true;
     }
     const entities = result[entityKey];
@@ -1100,22 +1110,25 @@ function buildPremiumText(ctx) {
   const account = userData(ctx.from.id);
   const status = account.premium ? 'Faol' : 'Faol emas';
   const price = premiumStarsPrice();
-  return `Premium\n\n` +
-    `Premium holati: ${status}\n` +
-    `Post yuborish limiti: cheklanmagan\n` +
-    `Kanallar soni: cheklanmagan\n\n` +
-    `Bir postni bir nechta kanalga yuborish\n` +
-    `Post shablonlarini saqlash\n` +
-    `Tugmalarni bir qatorga joylash\n` +
-    `Post statistikasi\n` +
-    `Video, GIF va hujjat postlari\n\n` +
-    `Tarif narxi: ${price} Stars\n\n` +
-    `Premium olish uchun quyidagi tugmani bosing:`;
+  return `<tg-emoji emoji-id="5393396291369725822">💎</tg-emoji> Premium\n\n` +
+    `<tg-emoji emoji-id="5316727448644103237">👤</tg-emoji> Premium holati: ${status}\n` +
+    `<tg-emoji emoji-id="5972094476821208559">📤</tg-emoji> Post yuborish limiti: cheklanmagan\n` +
+    `<tg-emoji emoji-id="5972335630644943766">📢</tg-emoji> Kanallar soni: cheklanmagan\n\n` +
+    `<tg-emoji emoji-id="5470060791883374114">✍️</tg-emoji> Bir postni bir nechta kanalga yuborish\n` +
+    `<tg-emoji emoji-id="5370546867786523009">📝</tg-emoji> Post shablonlarini saqlash\n` +
+    `<tg-emoji emoji-id="5258108352008823107">➕</tg-emoji> Tugmalarni bir qatorga joylash\n` +
+    `<tg-emoji emoji-id="5431577498364158238">📊</tg-emoji> Post statistikasi\n` +
+    `<tg-emoji emoji-id="5971957540378910955">🖼</tg-emoji> Video, GIF va hujjat postlari\n\n` +
+    `<tg-emoji emoji-id="5974575468974705730">💳</tg-emoji> Tarif narxi: ${price} Stars\n\n` +
+    `<tg-emoji emoji-id="5393396291369725822">💎</tg-emoji> Premium olish uchun quyidagi tugmani bosing:`;
 }
 
 function premiumInlineKeyboard() {
   return Markup.inlineKeyboard([
-    [Markup.button.callback(`${premiumStarsPrice()} Stars bilan Premium olish`, 'premium_paid')]
+    [{
+      ...Markup.button.callback(`💎 ${premiumStarsPrice()} Stars bilan Premium olish`, 'premium_paid'),
+      icon_custom_emoji_id: '5393396291369725822'
+    }]
   ]);
 }
 
@@ -1338,7 +1351,8 @@ bot.command('post', startPostCreation);
 bot.command('stats', (ctx) => ctx.reply(premiumStatsText(ctx), mainKeyboard(ctx)));
 bot.command('settings', (ctx) => ctx.reply('Bot faqat o‘zbek tilida ishlaydi.', mainKeyboard(ctx)));
 bot.command('premium', (ctx) => ctx.reply(buildPremiumText(ctx), {
-  ...premiumInlineKeyboard()
+  ...premiumInlineKeyboard(),
+  parse_mode: 'HTML'
 }));
 bot.command('admin', (ctx) => {
   if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.', mainKeyboard(ctx));
@@ -1373,7 +1387,8 @@ bot.hears(['Yordam', menuButton('help', 'Yordam')], (ctx) => ctx.reply(helpText(
 
 bot.hears(['Premium', menuButton('premium', 'Premium')], (ctx) => {
   return ctx.reply(buildPremiumText(ctx), {
-    ...premiumInlineKeyboard()
+    ...premiumInlineKeyboard(),
+    parse_mode: 'HTML'
   });
 });
 

@@ -207,7 +207,8 @@ function decorateReplyMarkup(replyMarkup) {
 }
 
 function hasOurEmojiPrefix(text, parseMode, entities) {
-  if (parseMode === 'HTML' && /^<tg-emoji emoji-id="\d+">[^<]+<\/tg-emoji> /.test(text)) return true;
+  if (parseMode === 'HTML' &&
+    /^<tg-emoji (?:emoji-id|id)="\d+">[^<]+<\/tg-emoji>(?: |$)/.test(text)) return true;
   if (parseMode === 'MarkdownV2' && /^!\[\]\(tg:\/\/emoji\?id=\d+\) /.test(text)) return true;
   return entities?.some((entity) =>
     entity.type === 'custom_emoji' &&
@@ -229,7 +230,7 @@ function prefixCustomEmoji(text, payload, entityKey, parseModeKey) {
     !entities?.some((entity) => entity.offset === 0);
   const prefixLength = hasVisibleEmojiPrefix ? 0 : emoji.emoji.length + 1;
 
-  if (parseMode === 'HTML') {
+  if (parseMode === 'HTML' || /<tg-emoji\s+(?:emoji-id|id)=["']\d+["']>/.test(text)) {
     if (hasVisibleEmojiPrefix) return text;
     if (Array.isArray(entities)) {
       payload[entityKey] = entities.map((entity) => ({ ...entity, offset: entity.offset + prefixLength }));
@@ -259,6 +260,18 @@ function prefixCustomEmoji(text, payload, entityKey, parseModeKey) {
 
 function decorateTelegramPayload(method, originalPayload) {
   const payload = { ...originalPayload };
+  if (typeof payload.text === 'string' &&
+    (method === 'sendMessage' || method === 'editMessageText') &&
+    /<tg-emoji\s+(?:emoji-id|id)=["']\d+["']>/.test(payload.text) &&
+    !payload.parse_mode) {
+    payload.parse_mode = 'HTML';
+  }
+  if (typeof payload.caption === 'string' &&
+    ['sendPhoto', 'sendVideo', 'sendAnimation', 'sendDocument', 'sendAudio', 'sendVoice', 'editMessageCaption'].includes(method) &&
+    /<tg-emoji\s+(?:emoji-id|id)=["']\d+["']>/.test(payload.caption) &&
+    !payload.parse_mode) {
+    payload.parse_mode = 'HTML';
+  }
   if (payload.reply_markup) payload.reply_markup = decorateReplyMarkup(payload.reply_markup);
   if (method === 'sendMessage' || method === 'editMessageText') {
     payload.text = prefixCustomEmoji(payload.text, payload, 'entities', 'parse_mode');
@@ -303,7 +316,7 @@ function removePremiumEmoji(payload) {
   ]) {
     const text = result[textKey];
     if (typeof text !== 'string') continue;
-    const tagPattern = /<tg-emoji emoji-id="(\d+)">([^<]+)<\/tg-emoji>/g;
+    const tagPattern = /<tg-emoji (?:emoji-id|id)="(\d+)">([^<]+)<\/tg-emoji>/g;
     let replacedTag = false;
     const fallbackText = text.replace(tagPattern, (tag, id, emoji) => {
       if (!CUSTOM_EMOJI_IDS.has(id)) return tag;
@@ -315,7 +328,7 @@ function removePremiumEmoji(payload) {
       changed = true;
     }
 
-    const tagPrefix = /^<tg-emoji emoji-id="(\d+)">([^<]+)<\/tg-emoji> /.exec(text);
+    const tagPrefix = /^<tg-emoji (?:emoji-id|id)="(\d+)">([^<]+)<\/tg-emoji> /.exec(text);
     const markdownPrefix = /^!\[\]\(tg:\/\/emoji\?id=(\d+)\) /.exec(text);
     const prefix = tagPrefix || markdownPrefix;
     const hasMarkupPrefix = Boolean(prefix && CUSTOM_EMOJI_IDS.has(prefix[1]));

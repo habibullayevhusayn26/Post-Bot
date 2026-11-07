@@ -1,5 +1,18 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const test = require('node:test');
+const vm = require('node:vm');
+
+const botSource = fs.readFileSync('bot.js', 'utf8');
+const helperStart = botSource.indexOf('const EMOJIS = Object.freeze({');
+const helperEnd = botSource.indexOf('\nconst token = process.env.BOT_TOKEN;', helperStart);
+assert.notEqual(helperStart, -1, 'emoji implementation must remain in bot.js');
+assert.notEqual(helperEnd, -1, 'emoji implementation must be before bot startup');
+const helperModule = { exports: {} };
+vm.runInNewContext(
+  `${botSource.slice(helperStart, helperEnd)}\nmodule.exports = { EMOJIS, decorateReplyMarkup, decorateTelegramPayload, getEmojiForText, isCustomEmojiError, removePremiumEmoji };`,
+  { module: helperModule }
+);
 const {
   EMOJIS,
   decorateReplyMarkup,
@@ -7,7 +20,7 @@ const {
   getEmojiForText,
   isCustomEmojiError,
   removePremiumEmoji
-} = require('./premium-emojis');
+} = helperModule.exports;
 
 test('maps each supplied premium emoji to its Telegram custom emoji ID', () => {
   assert.equal(Object.keys(EMOJIS).length, 27);
@@ -79,7 +92,7 @@ test('prefixes plain text with a custom emoji entity and shifts existing entity 
   });
 
   assert.equal(decorated.text, '📊 Statistika tayyor');
-  assert.deepEqual(decorated.entities, [
+  assert.deepEqual(JSON.parse(JSON.stringify(decorated.entities)), [
     { type: 'custom_emoji', offset: 0, length: 2, custom_emoji_id: EMOJIS.stats.id },
     { type: 'bold', offset: 3, length: 10 }
   ]);
@@ -96,6 +109,19 @@ test('formats plain outgoing messages as HTML and escapes message text', () => {
     `<tg-emoji emoji-id="${EMOJIS.write.id}">✍️</tg-emoji> Matn &lt;maxsus&gt; &amp; oddiy`
   );
   assert.equal(removePremiumEmoji(decorated).text, '✍️ Matn &lt;maxsus&gt; &amp; oddiy');
+});
+
+test('adds premium emoji to a regular greeting message sent by the bot', () => {
+  const decorated = decorateTelegramPayload('sendMessage', {
+    text: 'Assalomu alaykum! Kanal postlarini boshqarish botiga xush kelibsiz.'
+  });
+
+  assert.equal(decorated.parse_mode, 'HTML');
+  assert.match(decorated.text, /^<tg-emoji emoji-id="\d+">📢<\/tg-emoji> /);
+});
+
+test('bot sends every Telegram payload through the in-file emoji decorator', () => {
+  assert.match(botSource, /const decoratedPayload = decorateTelegramPayload\(method, payload\)/);
 });
 
 test('prefixes HTML captions without changing HTML parse mode', () => {
@@ -121,7 +147,7 @@ test('removes generated premium emoji metadata for an API-compatible retry', () 
   const fallback = removePremiumEmoji(decorated);
 
   assert.equal(fallback.text, '📊 Statistika tayyor');
-  assert.deepEqual(fallback.entities, [{ type: 'bold', offset: 3, length: 10 }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(fallback.entities)), [{ type: 'bold', offset: 3, length: 10 }]);
   assert.equal(fallback.reply_markup.inline_keyboard[0][0].icon_custom_emoji_id, undefined);
 });
 

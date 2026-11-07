@@ -56,18 +56,6 @@ const botInstanceId = require('node:crypto').randomUUID();
 const express = require('express');
 const app = express();
 const port = Number(process.env.PORT) || 3000;
-const renderExternalUrl = process.env.RENDER_EXTERNAL_URL?.trim().replace(/\/+$/, '');
-const configuredWebAppUrl = process.env.WEB_APP_URL?.trim() ||
-  (renderExternalUrl ? `${renderExternalUrl}/app` : '');
-let webAppUrl = '';
-if (configuredWebAppUrl) {
-  const parsedWebAppUrl = new URL(configuredWebAppUrl);
-  if (parsedWebAppUrl.protocol !== 'https:') {
-    throw new Error('WEB_APP_URL must use HTTPS.');
-  }
-  if (parsedWebAppUrl.pathname === '/') parsedWebAppUrl.pathname = '/app';
-  webAppUrl = parsedWebAppUrl.toString().replace(/\/+$/, '');
-}
 
 app.get('/', (req, res) => res.send('Bot ishlamoqda...'));
 app.get('/health', (req, res) => res.status(200).json({
@@ -428,20 +416,14 @@ function isAdmin(ctx) {
 }
 
 function mainKeyboard(ctx) {
-  const keyboard = [];
-  if (webAppUrl) keyboard.push([Markup.button.webApp('Mini App', webAppUrl)]);
-  keyboard.push(
+  const keyboard = [
     [tr(ctx, 'createPost'), tr(ctx, 'channels')],
     ['Post statistikasi', tr(ctx, 'profile')],
     ['Premium', 'Yordam'],
     ['Video saqlash', 'Sozlamalar']
-  );
+  ];
   if (isAdmin(ctx)) keyboard.push([tr(ctx, 'admin')]);
   return Markup.keyboard(keyboard).resize();
-}
-
-function miniAppKeyboard(ctx) {
-  return mainKeyboard(ctx);
 }
 
 function adminKeyboard(ctx) {
@@ -1115,10 +1097,6 @@ bot.command('profile', (ctx) => ctx.reply(buildProfileText(ctx), mainKeyboard(ct
 bot.command('help', (ctx) => ctx.reply(helpText(ctx), mainKeyboard(ctx)));
 bot.command('post', startPostCreation);
 bot.command('stats', (ctx) => ctx.reply(premiumStatsText(ctx), mainKeyboard(ctx)));
-bot.command('app', (ctx) => {
-  if (!webAppUrl) return ctx.reply('Mini App manzili sozlanmagan. WEB_APP_URL ni HTTPS manzilga sozlang.');
-  return ctx.reply('Mini App’ni ochish uchun quyidagi tugmani bosing.', miniAppKeyboard(ctx));
-});
 bot.command('settings', (ctx) => ctx.reply('Bot faqat o‘zbek tilida ishlaydi.', mainKeyboard(ctx)));
 bot.command('premium', (ctx) => ctx.reply(buildPremiumText(ctx), {
   ...premiumInlineKeyboard(),
@@ -1813,8 +1791,7 @@ async function setupBotCommands() {
       { command: 'channels', description: 'Kanallarni ko‘rish va boshqarish' },
       { command: 'stats', description: 'Post statistikasi' },
       { command: 'profile', description: 'Profil ma’lumotlari' },
-      { command: 'premium', description: 'Premium tarif va to‘lov' },
-      ...(webAppUrl ? [{ command: 'app', description: 'Mini App’ni ochish' }] : [])
+      { command: 'premium', description: 'Premium tarif va to‘lov' }
     ];
     await bot.telegram.setMyCommands(commands);
     await bot.telegram.setMyCommands(

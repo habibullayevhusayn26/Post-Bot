@@ -18,3 +18,8 @@ test('Mini App interface only loads the non-publishing application script', () =
   assert.doesNotMatch(appSource, /\/posts(?:\/|['"`])/);
   assert.doesNotMatch(appSource, /function sendNow|function sched|function save\(/);
 });
+
+test('Mini App is not exposed as a bot keyboard button or slash command', () => {
+  assert.doesNotMatch(botSource, /Markup\.button\.webApp|miniAppKeyboard/);
+  assert.doesNotMatch(botSource, /bot\.command\('app'|command: 'app'/);
+});

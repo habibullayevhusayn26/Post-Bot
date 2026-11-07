@@ -19,6 +19,19 @@ npm start
 
 Botga kanal username yuborishdan oldin uni kanalga administrator qilib qo‘shing va barcha administrator huquqlarini yoqing. Kanal username si public bo‘lishi kerak, masalan `@my_channel`.
 
+## Asosiy buyruqlar
+
+- `/start` — botni boshlash
+- `/help` — botdan foydalanish bo‘yicha yordam
+- `/post` — post yaratish va kanalni tanlash
+- `/channels` — kanallarni ko‘rish va boshqarish
+- `/stats` — post statistikasi
+- `/profile` — profil ma’lumotlari
+- `/premium` — premium tarif va to‘lov
+- `/settings` — tilni o‘zgartirish
+
+Asosiy menyudagi **Post yaratish** tugmasi post yuboriladigan kanalni tanlaydi. **Kanallarim** kanal qo‘shish, kanallarni boshqarish yoki o‘chirish uchun ishlatiladi. Admin menyusi va `/admin` buyrug‘i faqat bot adminiga ko‘rinadi.
+
 Ma’lumotlar `data.json` faylida saqlanadi. Tokenni HTML, Git yoki frontend kodiga yozmang. Siz yuborgan token chatga oshkor bo‘lganligi sababli BotFather’da `/revoke` orqali uni yangilang.
 
 Bot bir nechta server nusxasida ishga tushsa ham, MongoDB lease orqali Telegram update’larini faqat bitta nusxa qayta ishlaydi.

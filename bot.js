@@ -130,12 +130,12 @@ const languages = {
 };
 const text = {
   welcome: { uz: 'Tilni tanlang:', en: 'Choose your language:', ru: 'Выберите язык:', ar: 'اختر لغتك:', tr: 'Dilinizi seçin:', zh: '请选择语言：', ko: '언어를 선택하세요:', tg: 'Забонро интихоб кунед:' },
-  channels: { uz: 'Kanallar ro\'yxati', en: 'Channel list', ru: 'Список каналов', ar: 'قائمة القنوات', tr: 'Kanal listesi', zh: '频道列表', ko: '채널 목록', tg: 'Рӯйхати каналҳо' },
+  channels: { uz: 'Kanallarim', en: 'Channel list', ru: 'Список каналов', ar: 'قائمة القنوات', tr: 'Kanal listesi', zh: '频道列表', ko: '채널 목록', tg: 'Рӯйхати каналҳо' },
   addChannel: { uz: 'Kanal qo\'shish', en: 'Add channel', ru: 'Добавить канал', ar: 'إضافة قناة', tr: 'Kanal ekle', zh: '添加频道', ko: '채널 추가', tg: 'Иловаи kanal' },
   settings: { uz: 'Sozlamalar', en: 'Settings', ru: 'Настройки', ar: 'الإعدادات', tr: 'Ayarlar', zh: '设置', ko: '설정', tg: 'Танзимот' },
   admin: { uz: 'Admin panel', en: 'Admin panel', ru: 'Панель администратора', ar: 'لوحة المشرف', tr: 'Yönetici paneli', zh: '管理员面板', ko: '관리자 패널', tg: 'Панели админ' },
   languageSaved: { uz: 'Til saqlandi.', en: 'Language saved.', ru: 'Язык сохранён.', ar: 'تم حفظ اللغة.', tr: 'Dil kaydedildi.', zh: '语言已保存。', ko: '언어가 저장되었습니다.', tg: 'Забон нигоҳ дошта шуд.' },
-  createPost: { uz: 'Post yuborish', en: 'Create Post', ru: 'Создать пост', ar: 'إنشاء منشور', tr: 'Gönderi oluştur', zh: '创建帖子', ko: '게시물 만들기', tg: 'Эҷоди пост' },
+  createPost: { uz: 'Post yaratish', en: 'Create Post', ru: 'Создать пост', ar: 'إنشاء منشور', tr: 'Gönderi oluştur', zh: '创建帖子', ko: '게시물 만들기', tg: 'Эҷоди пост' },
   videoSave: { uz: 'Video saqlash', en: 'Save video', ru: 'Сохранить видео', ar: 'حفظ فيديو', tr: 'Video kaydet', zh: '保存视频', ko: '영상 저장', tg: 'Сабти видео' },
   profile: { uz: 'Profilim', en: 'My Profile', ru: 'Мой профиль', ar: 'صفحتي', tr: 'Profilim', zh: '我的资料', ko: '내 프로필', tg: 'Профили ман' },
   botId: { uz: 'Botdagi ID', en: 'Bot ID', ru: 'ID бота', ar: 'معرف البوت', tr: 'Bot ID', zh: '机器人 ID', ko: '봇 ID', tg: 'ID-и бот' },
@@ -406,12 +406,11 @@ function isAdmin(ctx) {
 
 function mainKeyboard(ctx) {
   const keyboard = [
-    [tr(ctx, 'channels'), tr(ctx, 'addChannel')],
-    ['Post statistikasi'],
-    ['Profilim', 'Premium']
+    [tr(ctx, 'createPost'), tr(ctx, 'channels')],
+    ['Post statistikasi', tr(ctx, 'profile')],
+    ['Premium', tr(ctx, 'settings')]
   ];
   if (isAdmin(ctx)) keyboard.push([tr(ctx, 'admin')]);
-  keyboard.push([tr(ctx, 'settings')]);
   return Markup.keyboard(keyboard).resize();
 }
 
@@ -585,6 +584,14 @@ async function runWithConcurrency(items, limit, task) {
 function channelKeyboard(ctx, channels) {
   return Markup.inlineKeyboard([
     ...channels.map((channel) => [Markup.button.callback(`${channel.title}`, `channel:${channel.id}`)]),
+    [Markup.button.callback('Bir nechta kanalga yuborish', 'compose_multi')],
+    [Markup.button.callback(localizeReply(ctx, 'Kanal qo\'shish'), 'add_channel')]
+  ]);
+}
+
+function postChannelKeyboard(ctx, channels) {
+  return Markup.inlineKeyboard([
+    ...channels.map((channel) => [Markup.button.callback(channel.title, `compose:${channel.id}`)]),
     [Markup.button.callback('Bir nechta kanalga yuborish', 'compose_multi')],
     [Markup.button.callback(localizeReply(ctx, 'Kanal qo\'shish'), 'add_channel')]
   ]);
@@ -976,9 +983,42 @@ async function checkFullAdmin(ctx, username) {
 async function showChannels(ctx) {
   const channels = userData(ctx.from.id).channels;
   if (!channels.length) {
-    return ctx.reply('Sizda hali kanal yo\'q. Kanal username sini yuborish uchun «Kanal qo\'shish» tugmasini bosing.', mainKeyboard(ctx));
+    return ctx.reply(
+      'Hozircha kanal qo\'shilmagan. Boshlash uchun kanalingizni qo\'shing.',
+      Markup.inlineKeyboard([[Markup.button.callback(tr(ctx, 'addChannel'), 'add_channel')]])
+    );
   }
-  return ctx.reply('Kanalni tanlang:', channelKeyboard(ctx, channels));
+  return ctx.reply('Boshqarish uchun kanalni tanlang:', channelKeyboard(ctx, channels));
+}
+
+async function startPostCreation(ctx) {
+  const channels = userData(ctx.from.id).channels;
+  if (!channels.length) {
+    return ctx.reply(
+      'Post yaratishdan oldin kanal qo\'shing.',
+      Markup.inlineKeyboard([[Markup.button.callback(tr(ctx, 'addChannel'), 'add_channel')]])
+    );
+  }
+  return ctx.reply('Post qaysi kanalga yuborilsin?', postChannelKeyboard(ctx, channels));
+}
+
+function helpText(ctx) {
+  const commands = [
+    'Botdan foydalanish:',
+    '/post — yangi post yaratish',
+    '/channels — kanallarni ko\'rish va boshqarish',
+    '/stats — post statistikasi',
+    '/profile — profilingiz',
+    '/premium — premium tarif va to\'lov',
+    '/settings — tilni o\'zgartirish',
+    '/help — buyruqlar bo\'yicha yordam'
+  ];
+  if (isAdmin(ctx)) commands.push('/admin — admin panel');
+  commands.push(
+    '',
+    'Post yaratish uchun avval kanalingizni qo\'shing va botga administrator huquqlarini bering.'
+  );
+  return commands.join('\n');
 }
 
 function reset(ctx) {
@@ -1022,10 +1062,17 @@ bot.action(/^language:(uz|en|ru|ar|tr|zh|ko|tg)$/, async (ctx) => {
 
 bot.command('settings', (ctx) => ctx.reply(tr(ctx, 'welcome'), languageKeyboard()));
 bot.command('profile', (ctx) => ctx.reply(buildProfileText(ctx), mainKeyboard(ctx)));
+bot.command('help', (ctx) => ctx.reply(helpText(ctx), mainKeyboard(ctx)));
+bot.command('post', startPostCreation);
+bot.command('stats', (ctx) => ctx.reply(premiumStatsText(ctx), mainKeyboard(ctx)));
 bot.command('premium', (ctx) => ctx.reply(buildPremiumText(ctx), {
   ...premiumInlineKeyboard(),
   parse_mode: 'HTML'
 }));
+bot.command('admin', (ctx) => {
+  if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.', mainKeyboard(ctx));
+  return ctx.reply('Admin panel', adminKeyboard(ctx));
+});
 
 bot.action('premium:stats', async (ctx) => {
   await ctx.answerCbQuery();
@@ -1036,12 +1083,12 @@ bot.command('channels', showChannels);
 
 // --- ESKI MA'LUMOTLARNI YUKLAB OLISH BUYRUG'I --
 
-bot.hears(Object.values(text.createPost), showChannels);
+bot.hears([...new Set(['Post yuborish', ...Object.values(text.createPost)])], startPostCreation);
 bot.hears(Object.values(text.videoSave), (ctx) => {
   ctx.session = { step: 'media_url' };
   return ctx.reply('Ijtimoiy tarmoqdan rasm/video URL yuboring:', Markup.removeKeyboard());
 });
-bot.hears(Object.values(text.channels), showChannels);
+bot.hears([...new Set(['Kanallar ro\'yxati', ...Object.values(text.channels)])], showChannels);
 bot.hears(Object.values(text.addChannel), (ctx) => {
   ctx.session = { step: 'channel' };
   ctx.reply('Kanal username sini yuboring, masalan: @my_channel');
@@ -1049,7 +1096,7 @@ bot.hears(Object.values(text.addChannel), (ctx) => {
 
 bot.hears(Object.values(text.settings), (ctx) => ctx.reply(tr(ctx, 'welcome'), languageKeyboard()));
 
-bot.hears('Profilim', (ctx) => {
+bot.hears(Object.values(text.profile), (ctx) => {
   return ctx.reply(buildProfileText(ctx), mainKeyboard(ctx));
 });
 
@@ -1701,6 +1748,28 @@ async function setupBotAbout() {
   }
 }
 
+async function setupBotCommands() {
+  try {
+    const commands = [
+      { command: 'start', description: 'Botni boshlash' },
+      { command: 'help', description: 'Buyruqlar va foydalanish bo‘yicha yordam' },
+      { command: 'post', description: 'Yangi kanal posti yaratish' },
+      { command: 'channels', description: 'Kanallarni ko‘rish va boshqarish' },
+      { command: 'stats', description: 'Post statistikasi' },
+      { command: 'profile', description: 'Profil ma’lumotlari' },
+      { command: 'premium', description: 'Premium tarif va to‘lov' },
+      { command: 'settings', description: 'Tilni o‘zgartirish' }
+    ];
+    await bot.telegram.setMyCommands(commands);
+    await bot.telegram.setMyCommands(
+      [...commands, { command: 'admin', description: 'Admin panel' }],
+      { scope: { type: 'chat', chat_id: ADMIN_TG_ID } }
+    );
+  } catch (error) {
+    console.error('Bot buyruqlar menyusini yangilashda xatolik:', error.response?.description || error.message);
+  }
+}
+
 let pollingLeaseTimer;
 let leaseRenewalRunning = false;
 let shutdownRequested = false;
@@ -1798,6 +1867,7 @@ async function startBot() {
   await bot.launch();
   try {
     console.log('Bot ishga tushdi.');
+    await setupBotCommands();
     await setupBotAbout();
   } catch (error) {
     console.error('Bot setup failed:', error);

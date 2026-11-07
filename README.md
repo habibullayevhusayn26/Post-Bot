@@ -34,7 +34,8 @@ Botni qayta ishga tushirgach `/start` yuboring: asosiy menyuda **Postlar Mini Ap
 - `/stats` — post statistikasi
 - `/profile` — profil ma’lumotlari
 - `/premium` — premium tarif va to‘lov
-- `/settings` — tilni o‘zgartirish
+
+Bot va Mini App faqat o‘zbek tilida ishlaydi; til tanlash funksiyasi mavjud emas.
 
 Asosiy menyudagi **Post yaratish** tugmasi post yuboriladigan kanalni tanlaydi. **Kanallarim** kanal qo‘shish, kanallarni boshqarish yoki o‘chirish uchun ishlatiladi. Admin menyusi va `/admin` buyrug‘i faqat bot adminiga ko‘rinadi.
 
@@ -49,5 +50,3 @@ Har bir yuborilgan postga avtomatik ravishda random rangli `Developer` tugmasi h
 `@habibullayev_28` username’li admin uchun pastki menyuda `Admin panel` ko‘rinadi. Panelda foydalanuvchilar va kanallar statistikasi, majburiy obuna kanalini sozlash hamda majburiy obunani o‘chirish mavjud. Majburiy obuna kanalida bot administrator bo‘lishi kerak.
 
 Admin paneldagi `Barchaga post yuborish` orqali rasmni ixtiyoriy qoldirib, izoh va URL tugmalar bilan barcha ro‘yxatdagi kanallarga hamda majburiy obuna kanaliga obuna bo‘lgan foydalanuvchilarga broadcast yuborish mumkin.
-
-Birinchi `/start` paytida til tanlanadi: o‘zbek, ingliz, rus, arab, turk, xitoy, koreys yoki tojik. Tilni `/settings` buyrug‘i yoki pastki menyudagi sozlamalar tugmasi orqali o‘zgartirish mumkin.

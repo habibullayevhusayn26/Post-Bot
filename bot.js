@@ -20,7 +20,7 @@ const userSchema = new mongoose.Schema({
   joinedAt: { type: Date, default: Date.now },
   personalId: { type: Number },
   nickname: { type: String, default: '' },
-  language: { type: String, default: null },
+  language: { type: String, default: 'uz' },
   channels: { type: Array, default: [] },
   premium: { type: Boolean, default: false },
   postLog: { type: Array, default: [] },
@@ -34,8 +34,7 @@ const userSchema = new mongoose.Schema({
     silent: { type: Boolean, default: false },
     linkPreview: { type: Boolean, default: true },
     signatureEnabled: { type: Boolean, default: false },
-    signature: { type: String, default: '' },
-    language: { type: String, default: 'uz' }
+    signature: { type: String, default: '' }
   },
   profileSeen: { type: Boolean, default: false },
 }, { versionKey: false });
@@ -139,23 +138,17 @@ if (!Array.isArray(data.settings.requiredChannels)) data.settings.requiredChanne
 const ADMIN_USERNAME = 'habibullayev_28';
 const ADMIN_PUBLIC_USERNAME = '@habibullayev_28';
 const ADMIN_TG_ID = 7669387254;
-const languages = {
-  uz: 'O\'zbekcha', en: 'English', ru: 'Русский'
-};
 const text = {
-  welcome: { uz: 'Tilni tanlang:', en: 'Choose your language:', ru: 'Выберите язык:', ar: 'اختر لغتك:', tr: 'Dilinizi seçin:', zh: '请选择语言：', ko: '언어를 선택하세요:', tg: 'Забонро интихоб кунед:' },
-  channels: { uz: 'Kanallarim', en: 'Channel list', ru: 'Список каналов', ar: 'قائمة القنوات', tr: 'Kanal listesi', zh: '频道列表', ko: '채널 목록', tg: 'Рӯйхати каналҳо' },
-  addChannel: { uz: 'Kanal qo\'shish', en: 'Add channel', ru: 'Добавить канал', ar: 'إضافة قناة', tr: 'Kanal ekle', zh: '添加频道', ko: '채널 추가', tg: 'Иловаи kanal' },
-  settings: { uz: 'Sozlamalar', en: 'Settings', ru: 'Настройки', ar: 'الإعدادات', tr: 'Ayarlar', zh: '设置', ko: '설정', tg: 'Танзимот' },
-  admin: { uz: 'Admin panel', en: 'Admin panel', ru: 'Панель администратора', ar: 'لوحة المشرف', tr: 'Yönetici paneli', zh: '管理员面板', ko: '관리자 패널', tg: 'Панели админ' },
-  languageSaved: { uz: 'Til saqlandi.', en: 'Language saved.', ru: 'Язык сохранён.', ar: 'تم حفظ اللغة.', tr: 'Dil kaydedildi.', zh: '语言已保存。', ko: '언어가 저장되었습니다.', tg: 'Забон нигоҳ дошта шуд.' },
-  createPost: { uz: 'Post yaratish', en: 'Create Post', ru: 'Создать пост', ar: 'إنشاء منشور', tr: 'Gönderi oluştur', zh: '创建帖子', ko: '게시물 만들기', tg: 'Эҷоди пост' },
-  videoSave: { uz: 'Video saqlash', en: 'Save video', ru: 'Сохранить видео', ar: 'حفظ فيديو', tr: 'Video kaydet', zh: '保存视频', ko: '영상 저장', tg: 'Сабти видео' },
-  profile: { uz: 'Profilim', en: 'My Profile', ru: 'Мой профиль', ar: 'صفحتي', tr: 'Profilim', zh: '我的资料', ko: '내 프로필', tg: 'Профили ман' },
-  botId: { uz: 'Botdagi ID', en: 'Bot ID', ru: 'ID бота', ar: 'معرف البوت', tr: 'Bot ID', zh: '机器人 ID', ko: '봇 ID', tg: 'ID-и бот' },
-  telegramId: { uz: 'Telegram ID', en: 'Telegram ID', ru: 'Telegram ID', ar: 'معرف تلغрам', tr: 'Telegram ID', zh: 'Telegram ID', ko: '텔레그램 ID', tg: 'ID-и Телеграм' },
-  username: { uz: 'Username', en: 'Username', ru: 'Username', ar: 'اسم المستخدم', tr: 'Kullanıcı adı', zh: '用户名', ko: '사용자 이름', tg: 'Номи корбар' },
-  nickname: { uz: 'Nickname', en: 'Nickname', ru: 'Nickname', ar: 'اسم المستعار', tr: 'Takma ad', zh: '昵称', ko: '닉네임', tg: 'Никнейм' },
+  channels: { uz: 'Kanallarim' },
+  addChannel: { uz: 'Kanal qo\'shish' },
+  admin: { uz: 'Admin panel' },
+  createPost: { uz: 'Post yaratish' },
+  videoSave: { uz: 'Video saqlash' },
+  profile: { uz: 'Profilim' },
+  botId: { uz: 'Botdagi ID' },
+  telegramId: { uz: 'Telegram ID' },
+  username: { uz: 'Foydalanuvchi nomi' },
+  nickname: { uz: 'Taxallus' },
 };
 const replyTranslations = {
   en: {
@@ -229,12 +222,8 @@ const keyboardTranslations = {
   ko: { 'Kanal qo\'shish': '채널 추가', 'Post yaratish': '게시물 만들기', 'Kanalni o\'chirish': '채널 삭제', 'Orqaga': '뒤로', 'Havolali tugma qo\'shish': 'URL 버튼 추가', 'Postni yuborish': '게시물 게시', 'Bekor qilish': '취소', 'Ko\'k': '파란색', 'Yashil': '초록색', 'Qizil': '빨간색', 'Statistika': '통계', 'Barchaga post yuborish': '전체 방송', 'Majburiy obunani sozlash': '필수 구독 설정', 'Majburiy obunani o\'chirish': '필수 구독 해제', 'Kanalga obuna bo\'lish': '채널 구독', 'Obunani tekshirish': '구독 확인' },
   tg: { 'Kanal qo\'shish': 'Иловаи канал', 'Post yaratish': 'Эҷоди пост', 'Kanalni o\'chirish': 'Нест кардани канал', 'Orqaga': 'Бозгашт', 'Havolali tugma qo\'shish': 'Иловаи тугмаи пайванд', 'Postni yuborish': 'Нашри пост', 'Bekor qilish': 'Бекор кардан', 'Ko\'k': 'Кабуд', 'Yashil': 'Сабз', 'Qizil': 'Сурх', 'Statistika': 'Омори', 'Barchaga post yuborish': 'Ирсол ба ҳама', 'Majburiy obunani sozlash': 'Танзими обуна', 'Majburiy obunani o\'chirish': 'Хомӯш кардани обуна', 'Kanalga obuna bo\'lish': 'Обуна ба канал', 'Obunani tekshirish': 'Санҷиши обуна' }
 };
-for (const language of Object.keys(languages)) {
-  keyboardTranslations[language] ||= {};
-  keyboardTranslations[language]['Admin panel'] ||= text.admin[language];
-}
 const previewLabels = {
-  uz: ['Preview', 'Tasdiqlash'], en: ['Preview', 'Confirm'], ru: ['Предпросмотр', 'Подтвердить'],
+  uz: ['Ko\'rib chiqish', 'Tasdiqlash'], en: ['Preview', 'Confirm'], ru: ['Предпросмотр', 'Подтвердить'],
   tr: ['Önizleme', 'Onayla'], ar: ['معاينة', 'تأكيد'], zh: ['预览', '确认'], ko: ['미리보기', '확인'], tg: ['Пешнамоиш', 'Тасдиқ']
 };
 for (const [language, labels] of Object.entries(previewLabels)) {
@@ -242,9 +231,7 @@ for (const [language, labels] of Object.entries(previewLabels)) {
   keyboardTranslations[language]['Tasdiqlash'] = labels[1];
 }
 function localizeReply(ctx, message) {
-  const lang = userLanguage(ctx);
-  const translated = replyTranslations[lang]?.[message] || keyboardTranslations[lang]?.[message] || message;
-  return translated;
+  return message;
 }
 data.settings.requiredChannels ||= [];
 data.settings.premiumCardNumber ||=  '9860 0803 9258 5933';
@@ -336,7 +323,7 @@ function userData(userId) {
 
     data.users[key] = {
       channels: [],
-      language: null,
+      language: 'uz',
       personalId: nextId,
       username: '',
       nickname: '',
@@ -352,7 +339,7 @@ function userData(userId) {
   }
 
   data.users[key].channels ||= [];
-  data.users[key].language ||= null;
+  data.users[key].language = 'uz';
   data.users[key].premium ??= false;
   data.users[key].postLog ||= [];
   data.users[key].templates ||= [];
@@ -373,8 +360,8 @@ function userData(userId) {
   return data.users[key];
 }
 
-function userLanguage(ctx) {
-  return userData(ctx.from.id).language || 'uz';
+function userLanguage() {
+  return 'uz';
 }
 
 async function ensureUserInMongo(ctx, includeReferral = false) {
@@ -386,7 +373,8 @@ async function ensureUserInMongo(ctx, includeReferral = false) {
   const update = {
     $set: {
       username: ctx.from.username || '',
-      nickname: ctx.from.first_name || ctx.from.last_name || ''
+      nickname: ctx.from.first_name || ctx.from.last_name || '',
+      language: 'uz'
     },
     $setOnInsert: {
       telegramId,
@@ -408,15 +396,6 @@ function tr(ctx, key, fallback = key) {
   return text[key]?.[userLanguage(ctx)] || text[key]?.uz || fallback;
 }
 
-function languageKeyboard() {
-  const entries = Object.entries(languages);
-  const rows = [];
-  for (let i = 0; i < entries.length; i += 4) {
-    rows.push(entries.slice(i, i + 4).map(([code, name]) => Markup.button.callback(name, `language:${code}`)));
-  }
-  return Markup.inlineKeyboard(rows);
-}
-
 function isAdmin(ctx) {
   return ctx.from?.username?.toLowerCase() === ADMIN_USERNAME;
 }
@@ -425,7 +404,7 @@ function mainKeyboard(ctx) {
   const keyboard = [
     [tr(ctx, 'createPost'), tr(ctx, 'channels')],
     ['Post statistikasi', tr(ctx, 'profile')],
-    ['Premium', tr(ctx, 'settings')]
+    ['Premium', 'Yordam']
   ];
   if (isAdmin(ctx)) keyboard.push([tr(ctx, 'admin')]);
   if (webAppUrl) keyboard.unshift([Markup.button.webApp('Postlar Mini App', webAppUrl)]);
@@ -862,26 +841,21 @@ async function findUserByPersonalId(id) {
 
 function buildProfileText(ctx) {
   const account = userData(ctx.from.id);
-  const lang = userLanguage(ctx);
-  const premiumText = Boolean(account.premium) ? `${text.premiumActive?.[lang] || 'Active'} ${text.premium?.[lang] || 'Premium'}` : `${text.premiumInactive?.[lang] || 'Inactive'} ${text.premium?.[lang] || 'Premium'}`;
-  return `${text.profile?.[lang] || 'Profilim'}\n\n` +
-    `${text.botId?.[lang] || 'Botdagi ID'}: ${account.personalId}\n` +
-    `${text.telegramId?.[lang] || 'Telegram ID'}: ${ctx.from.id}\n` +
-    `${text.username?.[lang] || 'Username'}: ${ctx.from.username || '—'}\n` +
-    `${text.nickname?.[lang] || 'Nickname'}: ${ctx.from.first_name || '—'}\n` +
-    `${text.premiumStatus?.[lang] || 'Premium status'}: ${premiumText}`;
+  return `Profilim\n\n` +
+    `Botdagi ID: ${account.personalId}\n` +
+    `Telegram ID: ${ctx.from.id}\n` +
+    `Foydalanuvchi nomi: ${ctx.from.username || '—'}\n` +
+    `Ism: ${ctx.from.first_name || '—'}\n` +
+    `Premium holati: ${account.premium ? 'Faol' : 'Faol emas'}`;
 }
 
 async function handleStart(ctx) {
   const account = await ensureUserInMongo(ctx, true);
-  if (!account.language) {
-    account.language = 'uz';
-    await User.updateOne({ telegramId: Number(ctx.from.id) }, { $set: { language: account.language } });
-  }
+  account.language = 'uz';
+  await User.updateOne({ telegramId: Number(ctx.from.id) }, { $set: { language: 'uz' } });
   saveData();
   reset(ctx);
   if (!(await requiredSubscription(ctx))) return;
-  if (!account.language) return ctx.reply(tr(ctx, 'welcome'), languageKeyboard());
   return ctx.reply('Assalomu alaykum! Kanal postlarini boshqarish botiga xush kelibsiz.', {
     parse_mode: 'HTML',
     reply_markup: mainKeyboard(ctx)
@@ -928,16 +902,13 @@ async function chargeForPostIfNeeded(ctx) {
 
 function buildPremiumText(ctx) {
   const account = userData(ctx.from.id);
-  const lang = userLanguage(ctx);
-  const status = Boolean(account.premium)
-    ? `${text.premiumActive?.[lang] || 'Active'} ${text.premium?.[lang] || 'Premium'}`
-    : `${text.premiumInactive?.[lang] || 'Inactive'} ${text.premium?.[lang] || 'Premium'}`;
+  const status = account.premium ? 'Faol' : 'Faol emas';
   const cardNumber = String(data.settings?.premiumCardNumber || '9860 0803 9258 5933').trim();
   const price = Number(data.settings?.premiumPrice || 10000);
-  return `${text.premium?.[lang] || 'Premium'}\n\n` +
-    `${text.premiumStatus?.[lang] || 'Premium status'}: ${status}\n` +
-    `${text.premiumFeaturePost?.[lang] || 'Unlimited posts'}\n` +
-    `${text.premiumFeatureChannel?.[lang] || 'Unlimited channels'}\n\n` +
+  return `Premium\n\n` +
+    `Premium holati: ${status}\n` +
+    `Post yuborish limiti: cheklanmagan\n` +
+    `Kanallar soni: cheklanmagan\n\n` +
     `Bir postni bir nechta kanalga yuborish\n` +
     `Post shablonlarini saqlash\n` +
     `Tugmalarni bir qatorga joylash\n` +
@@ -1028,7 +999,6 @@ function helpText(ctx) {
     '/stats — post statistikasi',
     '/profile — profilingiz',
     '/premium — premium tarif va to\'lov',
-    '/settings — tilni o\'zgartirish',
     '/help — buyruqlar bo\'yicha yordam'
   ];
   if (isAdmin(ctx)) commands.push('/admin — admin panel');
@@ -1070,9 +1040,9 @@ app.get('/api/mini-app/bootstrap', async (req, res) => {
       linkPreview: true,
       signatureEnabled: false,
       signature: '',
-      language: account.language || 'uz',
       ...(account.miniAppSettings || {})
     };
+    delete settings.language;
     return res.json({
       user: {
         id: account.telegramId,
@@ -1108,8 +1078,7 @@ bot.use(async (ctx, next) => {
   const originalReply = ctx.reply.bind(ctx);
   ctx.reply = (message, ...args) => originalReply(localizeReply(ctx, message), ...args);
   const callbackData = ctx.callbackQuery?.data;
-  const isSettings = ctx.message?.text === '/settings';
-  if (isStart || isSettings || callbackData?.startsWith('language:') || callbackData === 'check_subscription' || isAdmin(ctx)) return next();
+  if (isStart || callbackData === 'check_subscription' || isAdmin(ctx)) return next();
 
   if (await requiredSubscription(ctx)) {
     return next();
@@ -1120,19 +1089,11 @@ bot.start(async (ctx) => {
   return handleStart(ctx);
 });
 
-bot.action(/^language:(uz|en|ru|ar|tr|zh|ko|tg)$/, async (ctx) => {
-  await ctx.answerCbQuery();
-  userData(ctx.from.id).language = ctx.match[1];
-  saveData();
-  reset(ctx);
-  return ctx.reply(tr(ctx, 'languageSaved'), mainKeyboard(ctx));
-});
-
-bot.command('settings', (ctx) => ctx.reply(tr(ctx, 'welcome'), languageKeyboard()));
 bot.command('profile', (ctx) => ctx.reply(buildProfileText(ctx), mainKeyboard(ctx)));
 bot.command('help', (ctx) => ctx.reply(helpText(ctx), mainKeyboard(ctx)));
 bot.command('post', startPostCreation);
 bot.command('stats', (ctx) => ctx.reply(premiumStatsText(ctx), mainKeyboard(ctx)));
+bot.command('settings', (ctx) => ctx.reply('Bot faqat o‘zbek tilida ishlaydi.', mainKeyboard(ctx)));
 bot.command('premium', (ctx) => ctx.reply(buildPremiumText(ctx), {
   ...premiumInlineKeyboard(),
   parse_mode: 'HTML'
@@ -1162,11 +1123,12 @@ bot.hears(Object.values(text.addChannel), (ctx) => {
   ctx.reply('Kanal username sini yuboring, masalan: @my_channel');
 });
 
-bot.hears(Object.values(text.settings), (ctx) => ctx.reply(tr(ctx, 'welcome'), languageKeyboard()));
-
 bot.hears(Object.values(text.profile), (ctx) => {
   return ctx.reply(buildProfileText(ctx), mainKeyboard(ctx));
 });
+
+bot.hears('Sozlamalar', (ctx) => ctx.reply('Bot faqat o‘zbek tilida ishlaydi.', mainKeyboard(ctx)));
+bot.hears('Yordam', (ctx) => ctx.reply(helpText(ctx), mainKeyboard(ctx)));
 
 bot.hears('Premium', (ctx) => {
   return ctx.reply(buildPremiumText(ctx), {
@@ -1307,7 +1269,7 @@ bot.action('admin:subscription_off', async (ctx) => {
   await BotConfig.findOneAndUpdate(
     { configKey: 'main_config' },
     { $set: { channels: [], 'settings.requiredChannels': [] }, $unset: { 'settings.requiredChannel': 1 } },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: 'after' }
   );
   saveData();
   return ctx.reply('Majburiy obuna o\'chirildi.', adminKeyboard(ctx));
@@ -1708,7 +1670,7 @@ bot.on('text', async (ctx) => {
       await BotConfig.findOneAndUpdate(
         { configKey: 'main_config' },
         { $set: { channels: data.settings.requiredChannels, 'settings.requiredChannels': data.settings.requiredChannels, 'settings.requiredChannel': channel } },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
       );
       saveData();
       reset(ctx);
@@ -1825,8 +1787,7 @@ async function setupBotCommands() {
       { command: 'channels', description: 'Kanallarni ko‘rish va boshqarish' },
       { command: 'stats', description: 'Post statistikasi' },
       { command: 'profile', description: 'Profil ma’lumotlari' },
-      { command: 'premium', description: 'Premium tarif va to‘lov' },
-      { command: 'settings', description: 'Tilni o‘zgartirish' }
+      { command: 'premium', description: 'Premium tarif va to‘lov' }
     ];
     await bot.telegram.setMyCommands(commands);
     await bot.telegram.setMyCommands(
@@ -1943,7 +1904,7 @@ async function sendMiniAppPost(telegramId, post) {
   }, {
     $set: { 'miniAppPosts.$.status': 'sending' },
     $push: { postLog: Date.now() }
-  }, { new: true }).lean();
+  }, { returnDocument: 'after' }).lean();
   if (!claimed) throw miniAppStatusError('Post hozir yuborilmoqda yoki yuborilgan.', 409);
 
   const claimedPost = claimed.miniAppPosts.find((item) => item.id === post.id);
@@ -2138,14 +2099,10 @@ app.patch('/api/mini-app/settings', async (req, res) => {
       silent: input.silent === undefined ? Boolean(current.silent) : Boolean(input.silent),
       linkPreview: input.linkPreview === undefined ? current.linkPreview !== false : Boolean(input.linkPreview),
       signatureEnabled: input.signatureEnabled === undefined ? Boolean(current.signatureEnabled) : Boolean(input.signatureEnabled),
-      signature: String(input.signature ?? current.signature ?? '').trim().slice(0, 256),
-      language: ['uz', 'ru', 'en'].includes(input.language) ? input.language : (current.language || account.language || 'uz')
+      signature: String(input.signature ?? current.signature ?? '').trim().slice(0, 256)
     };
     await User.updateOne({ telegramId: account.telegramId }, {
-      $set: {
-        miniAppSettings: settings,
-        language: settings.language
-      }
+      $set: { miniAppSettings: settings }
     });
     return res.json({ settings });
   } catch (error) {
@@ -2237,7 +2194,7 @@ async function acquirePollingLease() {
         }
       }, {
         upsert: true,
-        new: true
+        returnDocument: 'after'
       }).lean();
 
       if (lease?.leaseOwner === botInstanceId) {

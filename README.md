@@ -54,3 +54,5 @@ Har bir yuborilgan postga avtomatik ravishda random rangli `Developer` tugmasi h
 `@habibullayev_28` username’li admin uchun pastki menyuda `Admin panel` ko‘rinadi. Panelda foydalanuvchilar va kanallar statistikasi, majburiy obuna kanalini sozlash hamda majburiy obunani o‘chirish mavjud. Majburiy obuna kanalida bot administrator bo‘lishi kerak.
 
 Admin paneldagi `Barchaga post yuborish` orqali rasmni ixtiyoriy qoldirib, izoh va URL tugmalar bilan barcha ro‘yxatdagi kanallarga hamda majburiy obuna kanaliga obuna bo‘lgan foydalanuvchilarga broadcast yuborish mumkin.
+
+Admin paneldagi `Xabar va tugmalarni sozlash` bo‘limida bot yuboradigan xabarlardagi matn bo‘laklarini almashtirish, tugma nomi va rangini (ko‘k, yashil, qizil yoki standart) o‘zgartirish mumkin. Sozlamalar MongoDB’da saqlanadi va yangi yuboriladigan xabar hamda klaviaturalarga qo‘llanadi; mavjud xabarlar tahrirlanmaydi. O‘zgarishlarni sozlamalar ro‘yxatidan alohida o‘chirish yoki barchasini tiklash mumkin. Telegram rangli fonni faqat inline tugmalarda ko‘rsatadi; pastki menyu tugmalarining nomi o‘zgaradi, rangi esa Telegram standartida qoladi.

@@ -169,27 +169,117 @@ function getButtonStyle(value) {
   return { bg_primary: true };
 }
 
-function decorateButton(button) {
-  if (typeof button === 'string') return decorateButton({ text: button });
+function getInterfaceOverrides() {
+  if (!data.settings.interfaceOverrides || typeof data.settings.interfaceOverrides !== 'object') {
+    data.settings.interfaceOverrides = {};
+  }
+  if (!Array.isArray(data.settings.interfaceOverrides.messages)) {
+    data.settings.interfaceOverrides.messages = [];
+  }
+  if (!Array.isArray(data.settings.interfaceOverrides.buttons)) {
+    data.settings.interfaceOverrides.buttons = [];
+  }
+  return data.settings.interfaceOverrides;
+}
+
+function replaceConfiguredTextPayload(value, entities, rules) {
+  let text = value;
+  let updatedEntities = entities;
+  for (const rule of rules) {
+    if (typeof rule.find !== 'string' || !rule.find || typeof rule.replace !== 'string') continue;
+    const matches = [];
+    let position = 0;
+    while ((position = text.indexOf(rule.find, position)) !== -1) {
+      matches.push(position);
+      position += rule.find.length;
+    }
+    if (!matches.length) continue;
+    const transformOffset = (offset) => {
+      let delta = 0;
+      for (const start of matches) {
+        if (offset >= start + rule.find.length) {
+          delta += rule.replace.length - rule.find.length;
+        } else if (offset >= start) {
+          return start + delta + Math.min(offset - start, rule.replace.length);
+        } else {
+          break;
+        }
+      }
+      return offset + delta;
+    };
+    if (Array.isArray(updatedEntities)) {
+      updatedEntities = updatedEntities.map((entity) => {
+        if (!Number.isInteger(entity.offset) || !Number.isInteger(entity.length)) return entity;
+        const start = transformOffset(entity.offset);
+        const end = transformOffset(entity.offset + entity.length);
+        return { ...entity, offset: start, length: Math.max(0, end - start) };
+      });
+    }
+    text = text.split(rule.find).join(rule.replace);
+  }
+  return { text, entities: updatedEntities };
+}
+
+function normalizeCustomizedButtonText(value) {
+  for (const rule of getInterfaceOverrides().buttons) {
+    if (typeof rule?.find !== 'string' || typeof rule.replace !== 'string') continue;
+    const replacementEmoji = Object.values(EMOJIS).find(({ emoji: knownEmoji }) =>
+      rule.replace.startsWith(`${knownEmoji} `) || rule.replace === knownEmoji
+    );
+    const sourceEmoji = Object.values(EMOJIS).find(({ emoji: knownEmoji }) =>
+      rule.find.startsWith(`${knownEmoji} `)
+    ) || getEmojiForText(rule.find);
+    const visibleText = replacementEmoji ? rule.replace : `${sourceEmoji.emoji} ${rule.replace}`;
+    if (value === visibleText) {
+      const sourceEmoji = Object.values(EMOJIS).find(({ emoji: knownEmoji }) =>
+        rule.find.startsWith(`${knownEmoji} `)
+      );
+      return sourceEmoji ? rule.find.slice(sourceEmoji.emoji.length + 1) : rule.find;
+    }
+  }
+  return value;
+}
+
+function decorateButton(button, supportsStyle = true) {
+  if (typeof button === 'string') return decorateButton({ text: button }, supportsStyle);
   if (!button || typeof button !== 'object' || typeof button.text !== 'string') return button;
-  const existingEmoji = Object.values(EMOJIS).find(({ emoji }) =>
+  const defaultExistingEmoji = Object.values(EMOJIS).find(({ emoji }) =>
     button.text.startsWith(`${emoji} `) || button.text === emoji
   );
-  const emoji = existingEmoji || getEmojiForText(button.text);
+  const defaultEmoji = defaultExistingEmoji || getEmojiForText(button.text);
+  const visibleButtonText = defaultExistingEmoji ? button.text : `${defaultEmoji.emoji} ${button.text}`;
+  const defaultLabel = defaultExistingEmoji
+    ? button.text.slice(defaultExistingEmoji.emoji.length + 1)
+    : button.text;
+  const buttonOverride = getInterfaceOverrides().buttons.find((rule) =>
+    rule?.find === button.text || rule?.find === visibleButtonText || rule?.find === defaultLabel
+  );
+  const buttonText = buttonOverride ? buttonOverride.replace : button.text;
+  const existingEmoji = Object.values(EMOJIS).find(({ emoji }) =>
+    buttonText.startsWith(`${emoji} `) || buttonText === emoji
+  );
+  const emoji = existingEmoji || (buttonOverride ? defaultEmoji : getEmojiForText(buttonText));
   const legacyStyles = {
     primary: { bg_primary: true },
     success: { bg_success: true },
     danger: { bg_danger: true }
   };
-  const buttonStyle = button.button_style ||
-    legacyStyles[button.style] ||
-    getButtonStyle(button.text);
-  const { style, ...buttonWithoutLegacyStyle } = button;
+  const overrideStyles = {
+    primary: { bg_primary: true },
+    success: { bg_success: true },
+    danger: { bg_danger: true }
+  };
+  const buttonStyle = supportsStyle
+    ? buttonOverride
+      ? overrideStyles[buttonOverride.color]
+      : button.button_style || legacyStyles[button.style] || getButtonStyle(buttonText)
+    : undefined;
+  const { style, button_style, ...buttonWithoutLegacyStyle } = button;
   return {
     ...buttonWithoutLegacyStyle,
-    text: existingEmoji ? button.text : `${emoji.emoji} ${button.text}`,
+    text: existingEmoji ? buttonText : `${emoji.emoji} ${buttonText}`,
     icon_custom_emoji_id: button.icon_custom_emoji_id || emoji.id,
-    button_style: buttonStyle
+    ...(buttonStyle ? { button_style: buttonStyle } : {})
   };
 }
 
@@ -199,7 +289,9 @@ function decorateReplyMarkup(replyMarkup) {
   for (const key of ['keyboard', 'inline_keyboard']) {
     if (Array.isArray(result[key])) {
       result[key] = result[key].map((row) =>
-        Array.isArray(row) ? row.map(decorateButton) : row
+        Array.isArray(row)
+          ? row.map((button) => decorateButton(button, key === 'inline_keyboard'))
+          : row
       );
     }
   }
@@ -260,6 +352,28 @@ function prefixCustomEmoji(text, payload, entityKey, parseModeKey) {
 
 function decorateTelegramPayload(method, originalPayload) {
   const payload = { ...originalPayload };
+  const overrides = getInterfaceOverrides();
+  if (typeof payload.text === 'string') {
+    const customized = replaceConfiguredTextPayload(payload.text, payload.entities, overrides.messages);
+    payload.text = customized.text;
+    if (customized.entities) payload.entities = customized.entities;
+  }
+  if (typeof payload.caption === 'string') {
+    const customized = replaceConfiguredTextPayload(payload.caption, payload.caption_entities, overrides.messages);
+    payload.caption = customized.text;
+    if (customized.entities) payload.caption_entities = customized.entities;
+  }
+  if (Array.isArray(payload.media)) {
+    payload.media = payload.media.map((item) => {
+      if (typeof item.caption !== 'string') return item;
+      const customized = replaceConfiguredTextPayload(item.caption, item.caption_entities, overrides.messages);
+      return {
+        ...item,
+        caption: customized.text,
+        ...(customized.entities ? { caption_entities: customized.entities } : {})
+      };
+    });
+  }
   if (typeof payload.text === 'string' &&
     (method === 'sendMessage' || method === 'editMessageText') &&
     /<tg-emoji\s+(?:emoji-id|id)=["']\d+["']>/.test(payload.text) &&
@@ -761,10 +875,45 @@ function adminKeyboard(ctx) {
     [
       Markup.button.callback('Premium to\'lov sozlamalari', 'admin:premium_settings'),
     ],
+    [Markup.button.callback('Xabar va tugmalarni sozlash', 'admin:appearance')],
     [Markup.button.callback(localizeReply(ctx, 'Majburiy obunani sozlash'), 'admin:subscription')],
     [Markup.button.callback(localizeReply(ctx, 'Majburiy obuna kanallar ro\'yxati'), 'admin:required_list')],
     [Markup.button.callback(localizeReply(ctx, 'Majburiy obunani o\'chirish'), 'admin:subscription_off')],
     [Markup.button.callback('Userni qidirish', 'admin:user_search')]
+  ]);
+}
+
+function adminAppearanceKeyboard() {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback('Xabar matnini o\'zgartirish', 'admin:appearance:message')],
+    [Markup.button.callback('Tugma nomi va rangini o\'zgartirish', 'admin:appearance:button')],
+    [Markup.button.callback('Sozlamalar ro\'yxati', 'admin:appearance:list')],
+    [Markup.button.callback('Hammasini tiklash', 'admin:appearance:reset')],
+    [Markup.button.callback('Admin panelga qaytish', 'admin:back')]
+  ]);
+}
+
+function adminAppearanceListKeyboard(overrides) {
+  const rows = [];
+  overrides.messages.forEach((rule, index) => {
+    rows.push([Markup.button.callback(`Xabar ${index + 1} ni o'chirish`, `admin:appearance:delete-message:${index}`)]);
+  });
+  overrides.buttons.forEach((rule, index) => {
+    rows.push([Markup.button.callback(`Tugma ${index + 1} ni o'chirish`, `admin:appearance:delete-button:${index}`)]);
+  });
+  rows.push([Markup.button.callback('Sozlamalarga qaytish', 'admin:appearance')]);
+  return Markup.inlineKeyboard(rows);
+}
+
+function adminButtonColorKeyboard() {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback('Ko\'k', 'admin:appearance:color:primary'),
+      Markup.button.callback('Yashil', 'admin:appearance:color:success'),
+      Markup.button.callback('Qizil', 'admin:appearance:color:danger')
+    ],
+    [Markup.button.callback('Standart rang', 'admin:appearance:color:default')],
+    [Markup.button.callback('Bekor qilish', 'admin:appearance')]
   ]);
 }
 
@@ -1346,6 +1495,9 @@ bot.use(async (ctx, next) => {
 
   const originalReply = ctx.reply.bind(ctx);
   ctx.reply = (message, ...args) => originalReply(localizeReply(ctx, message), ...args);
+  if (typeof ctx.message?.text === 'string') {
+    ctx.message.text = normalizeCustomizedButtonText(ctx.message.text);
+  }
   const callbackData = ctx.callbackQuery?.data;
   if (isStart || isPaymentUpdate || callbackData === 'check_subscription' || isAdmin(ctx)) return next();
 
@@ -1419,6 +1571,110 @@ bot.action('check_subscription', async (ctx) => {
   if (await requiredSubscription(ctx)) {
     return ctx.reply('Obuna tasdiqlandi. Botdan foydalanishingiz mumkin.', mainKeyboard(ctx));
   }
+});
+
+bot.action('admin:appearance', async (ctx) => {
+  await ctx.answerCbQuery();
+  if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
+  reset(ctx);
+  return ctx.reply('Bot xabarlari va tugmalarini boshqarish:', adminAppearanceKeyboard());
+});
+
+bot.action('admin:appearance:message', async (ctx) => {
+  await ctx.answerCbQuery();
+  if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
+  ctx.session = { step: 'admin_appearance_message_find' };
+  return ctx.reply(
+    'O\'zgartirmoqchi bo\'lgan bot xabaridagi matn bo\'lagini aynan yuboring (maksimal 300 belgi).',
+    Markup.inlineKeyboard([[Markup.button.callback('Bekor qilish', 'admin:appearance')]])
+  );
+});
+
+bot.action('admin:appearance:button', async (ctx) => {
+  await ctx.answerCbQuery();
+  if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
+  ctx.session = { step: 'admin_appearance_button_find' };
+  return ctx.reply(
+    'O\'zgartirmoqchi bo\'lgan tugmaning hozirgi nomini aynan yuboring (maksimal 64 belgi).',
+    Markup.inlineKeyboard([[Markup.button.callback('Bekor qilish', 'admin:appearance')]])
+  );
+});
+
+bot.action('admin:appearance:list', async (ctx) => {
+  await ctx.answerCbQuery();
+  if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
+  const overrides = getInterfaceOverrides();
+  const lines = [
+    'Saqlangan sozlamalar:',
+    '',
+    'Xabar matnlari:'
+  ];
+  overrides.messages.forEach((rule, index) => {
+    lines.push(`${index + 1}. "${rule.find}" → "${rule.replace}"`);
+  });
+  if (!overrides.messages.length) lines.push('— Hozircha yo\'q');
+  lines.push('', 'Tugmalar:');
+  const colors = { primary: 'ko\'k', success: 'yashil', danger: 'qizil', default: 'standart' };
+  overrides.buttons.forEach((rule, index) => {
+    lines.push(`${index + 1}. "${rule.find}" → "${rule.replace}" (${colors[rule.color] || 'standart'})`);
+  });
+  if (!overrides.buttons.length) lines.push('— Hozircha yo\'q');
+  const message = lines.join('\n').slice(0, 4000);
+  return ctx.reply(message, adminAppearanceListKeyboard(overrides));
+});
+
+bot.action('admin:appearance:reset', async (ctx) => {
+  await ctx.answerCbQuery();
+  if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
+  return ctx.reply('Barcha xabar va tugma o\'zgarishlarini tiklaysizmi?', Markup.inlineKeyboard([
+    [Markup.button.callback('Ha, tiklash', 'admin:appearance:reset:confirm')],
+    [Markup.button.callback('Bekor qilish', 'admin:appearance')]
+  ]));
+});
+
+bot.action('admin:appearance:reset:confirm', async (ctx) => {
+  await ctx.answerCbQuery();
+  if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
+  data.settings.interfaceOverrides = { messages: [], buttons: [] };
+  await saveData([], true);
+  return ctx.reply('Barcha xabar va tugma sozlamalari tiklandi.', adminAppearanceKeyboard());
+});
+
+bot.action(/^admin:appearance:delete-(message|button):(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
+  const kind = ctx.match[1] === 'message' ? 'messages' : 'buttons';
+  const index = Number(ctx.match[2]);
+  const overrides = getInterfaceOverrides();
+  if (!Number.isSafeInteger(index) || index < 0 || index >= overrides[kind].length) {
+    return ctx.reply('Bu sozlama topilmadi yoki avval o\'chirilgan.', adminAppearanceKeyboard());
+  }
+  overrides[kind].splice(index, 1);
+  await saveData([], true);
+  return ctx.reply('Sozlama o\'chirildi.', adminAppearanceListKeyboard(overrides));
+});
+
+bot.action(/^admin:appearance:color:(primary|success|danger|default)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
+  const sessionState = ctx.session || {};
+  if (sessionState.step !== 'admin_appearance_button_color' ||
+    typeof sessionState.find !== 'string' ||
+    typeof sessionState.replace !== 'string') {
+    return ctx.reply('Tugma sozlash jarayoni topilmadi. Qaytadan boshlang.', adminAppearanceKeyboard());
+  }
+  const overrides = getInterfaceOverrides();
+  const rule = { find: sessionState.find, replace: sessionState.replace, color: ctx.match[1] };
+  const existingIndex = overrides.buttons.findIndex((entry) => entry.find === rule.find);
+  if (existingIndex < 0 && overrides.buttons.length >= 25) {
+    reset(ctx);
+    return ctx.reply('Tugma sozlamalari limiti (25) to\'ldi. Avval eski sozlamani o\'chiring.', adminAppearanceKeyboard());
+  }
+  if (existingIndex < 0) overrides.buttons.push(rule);
+  else overrides.buttons[existingIndex] = rule;
+  await saveData([], true);
+  reset(ctx);
+  return ctx.reply('Tugma nomi va rangi saqlandi.', adminAppearanceKeyboard());
 });
 
 bot.action('admin:user_search', async (ctx) => {
@@ -1921,6 +2177,58 @@ bot.on('text', async (ctx) => {
   const sessionState = ctx.session || {};
   const text = ctx.message.text;
   const trimmedText = text.trim();
+
+  if (sessionState.step === 'admin_appearance_message_find') {
+    if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
+    if (!trimmedText || text.length > 300) {
+      return ctx.reply('Matn bo\'lagi bo\'sh bo\'lmasin va 300 belgidan oshmasin. Qaytadan yuboring:');
+    }
+    sessionState.find = text;
+    sessionState.step = 'admin_appearance_message_replace';
+    return ctx.reply('Xabarda uning o\'rniga ko\'rsatiladigan yangi matnni yuboring (maksimal 300 belgi):');
+  }
+
+  if (sessionState.step === 'admin_appearance_message_replace') {
+    if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
+    if (!trimmedText || text.length > 300) {
+      return ctx.reply('Yangi matn bo\'sh bo\'lmasin va 300 belgidan oshmasin. Qaytadan yuboring:');
+    }
+    const overrides = getInterfaceOverrides();
+    const rule = { find: sessionState.find, replace: text };
+    const existingIndex = overrides.messages.findIndex((entry) => entry.find === rule.find);
+    if (existingIndex < 0 && overrides.messages.length >= 25) {
+      reset(ctx);
+      return ctx.reply('Xabar sozlamalari limiti (25) to\'ldi. Avval eski sozlamani o\'chiring.', adminAppearanceKeyboard());
+    }
+    if (existingIndex < 0) overrides.messages.push(rule);
+    else overrides.messages[existingIndex] = rule;
+    await saveData([], true);
+    reset(ctx);
+    return ctx.reply('Xabar matni saqlandi.', adminAppearanceKeyboard());
+  }
+
+  if (sessionState.step === 'admin_appearance_button_find') {
+    if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
+    if (!trimmedText || text.length > 64) {
+      return ctx.reply('Tugma nomi bo\'sh bo\'lmasin va 64 belgidan oshmasin. Qaytadan yuboring:');
+    }
+    sessionState.find = text;
+    sessionState.step = 'admin_appearance_button_replace';
+    return ctx.reply('Tugma uchun yangi nomni yuboring (maksimal 60 belgi):');
+  }
+
+  if (sessionState.step === 'admin_appearance_button_replace') {
+    if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
+    if (!trimmedText || Array.from(text).length > 60) {
+      return ctx.reply('Yangi tugma nomi bo\'sh bo\'lmasin va 60 belgidan oshmasin. Qaytadan yuboring:');
+    }
+    sessionState.replace = text;
+    sessionState.step = 'admin_appearance_button_color';
+    return ctx.reply(
+      'Tugma rangini tanlang. Rang Telegram inline tugmalarida qo\'llanadi; pastki menyu tugmalari standart rangda qoladi:',
+      adminButtonColorKeyboard()
+    );
+  }
 
   if (sessionState.step === 'admin_premium_stars_price_edit') {
     if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');

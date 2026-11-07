@@ -96,9 +96,9 @@ function renderStatistics() {
 function renderChannels() {
   $('#chs').innerHTML = state.channels.length
     ? state.channels.map((channel, index) =>
-      `<div class="row"><div class="ic" style="background:${['#007aff', '#ff9500', '#34c759', '#5856d6'][index % 4]}">${esc((channel.title || 'K').slice(0, 1))}</div><div class="t"><b>${esc(channel.title || channel.username || channel.id)}</b><small>${esc(channel.username || channel.id)}</small></div><button class="v" data-remove-channel="${esc(channel.id)}" aria-label="Kanalni o‘chirish">O‘chirish</button></div>`
+      `<div class="row"><div class="ic" style="background:${['#007aff', '#ff9500', '#34c759', '#5856d6'][index % 4]}">${esc((channel.title || 'K').slice(0, 1))}</div><div class="t"><b>${esc(channel.title || channel.username || channel.id)}</b><small>${esc(channel.username || channel.id)}</small></div><button class="v" data-remove-channel="${esc(channel.id)}" aria-label="Chatni o‘chirish">O‘chirish</button></div>`
     ).join('')
-    : '<div class="empty">Kanal ulanmagan. Kanalni ulash uchun pastdagi tugmani bosing.</div>';
+    : '<div class="empty">Kanal yoki guruh ulanmagan. Ulash uchun pastdagi tugmani bosing.</div>';
 }
 
 function renderProfile() {
@@ -195,7 +195,41 @@ function addChannel() {
   $('#channelUsername').value = '';
   dim(true);
   $('#channelSheet').classList.add('on');
-  $('#channelUsername').focus();
+}
+
+async function selectTelegramChat(isChannel) {
+  if (typeof tg?.requestChat !== 'function') {
+    toast('Chat tanlash bu Telegram versiyasida mavjud emas. Telegram ilovasini yangilang yoki public kanal username’ini kiriting.');
+    return;
+  }
+  const rights = isChannel
+    ? { can_manage_chat: true, can_post_messages: true }
+    : { can_manage_chat: true };
+  try {
+    const selection = await tg.requestChat({
+      chat_is_channel: isChannel,
+      user_administrator_rights: rights,
+      bot_administrator_rights: rights,
+      bot_is_member: !isChannel,
+      request_title: true,
+      request_username: true
+    });
+    if (!selection) return;
+    const chatId = selection.chat_id ?? selection.id ?? selection.chat?.id;
+    if (chatId === undefined || chatId === null || !Number.isSafeInteger(Number(chatId)) || Number(chatId) === 0) {
+      throw new Error('Telegram tanlangan chat ID’sini qaytarmadi. Qayta urinib ko‘ring.');
+    }
+    const data = await request('/channels/select', {
+      method: 'POST',
+      body: JSON.stringify({ chatId: Number(chatId), chatType: isChannel ? 'channel' : 'group' })
+    });
+    state.channels = data.channels || [];
+    closeAll();
+    renderChannels();
+    toast('Kanal yoki guruh muvaffaqiyatli ulandi.');
+  } catch (error) {
+    toast(error.message || 'Chatni ulashda xatolik yuz berdi.');
+  }
 }
 
 async function submitChannel() {
@@ -227,13 +261,13 @@ function confirmAction(title, message, action) {
 }
 
 function removeChannel(id) {
-  confirmAction('Kanalni uzasizmi?', 'Kanal ro‘yxatingizdan o‘chiriladi.', async () => {
+  confirmAction('Chatni uzasizmi?', 'Kanal yoki guruh ro‘yxatingizdan o‘chiriladi.', async () => {
     try {
       const data = await request(`/channels/${encodeURIComponent(id)}`, { method: 'DELETE' });
       state.channels = data.channels || [];
       closeAll();
       renderChannels();
-      toast('Kanal ro‘yxatdan o‘chirildi.');
+      toast('Chat ro‘yxatdan o‘chirildi.');
     } catch (error) {
       closeAll();
       toast(error.message);

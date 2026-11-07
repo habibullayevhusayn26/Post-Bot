@@ -225,11 +225,11 @@ html,body,.push{background:radial-gradient(90% 38% at 0% 0%,rgba(0,122,255,.3),t
   </section>
 
   <section class="tab" id="t-ch">
-    <div class="large">Kanallar</div>
-    <div class="head">Ulangan kanallar</div>
+    <div class="large">Kanallar va guruhlar</div>
+    <div class="head">Ulangan chatlar</div>
     <div class="group" id="chs"></div>
-    <button class="cta gray" onclick="addChannel()">Kanal qo‘shish</button>
-    <div class="foot">Kanal public bo‘lishi kerak. Siz kanal egasi yoki admini, bot esa post yuborish huquqiga ega admin bo‘lishi lozim.</div>
+    <button class="cta gray" onclick="addChannel()">Kanal yoki guruh ulash</button>
+    <div class="foot">Tanlashda siz chat administratori, bot esa post yuborish huquqiga ega administrator bo‘lishi kerak.</div>
   </section>
 
   <section class="tab" id="t-profile">
@@ -241,7 +241,7 @@ html,body,.push{background:radial-gradient(90% 38% at 0% 0%,rgba(0,122,255,.3),t
     <button class="cta" id="premiumRequest" onclick="chooseReceipt()">To‘lov chekini yuborish</button>
     <div class="head" style="margin-top:22px">Yordam</div>
     <div class="group">
-      <div class="row"><div class="t"><b>Kanallarni ulash</b><small>Botni kanalga post yuborish huquqi bilan administrator qilib qo‘shing, keyin kanal username’ini kiriting.</small></div></div>
+      <div class="row"><div class="t"><b>Kanal va guruhlarni ulash</b><small>Chatni ro‘yxatdan tanlang. Siz chat administratori, bot esa kanalga post yuborish huquqiga ega administrator bo‘lishi kerak.</small></div></div>
       <div class="row"><div class="t"><b>Post yuborish</b><small>Post yaratish va yuborish Mini App’da mavjud emas. Botning asosiy menyusidan foydalaning.</small></div></div>
       <div class="row"><div class="t"><b>Yordam xizmati</b><small>Botda /help buyrug‘ini yuboring.</small></div></div>
     </div>
@@ -267,11 +267,14 @@ html,body,.push{background:radial-gradient(90% 38% at 0% 0%,rgba(0,122,255,.3),t
 <div class="sheet" id="channelSheet">
   <div class="grab"></div>
   <div class="nav" style="position:static;margin:0 -16px 10px;background:none;border:0;backdrop-filter:none">
-    <button onclick="closeAll()">Bekor</button><h3>Kanal qo‘shish</h3><button onclick="submitChannel()" style="font-weight:600">Qo‘shish</button>
+    <button onclick="closeAll()">Bekor</button><h3>Chat ulash</h3><span></span>
   </div>
-  <div class="head">Kanal username</div>
+  <button class="cta" onclick="selectTelegramChat(true)">Kanalni ro‘yxatdan tanlash</button>
+  <button class="cta gray" onclick="selectTelegramChat(false)">Guruhni ro‘yxatdan tanlash</button>
+  <div class="head">Yoki public kanal username’i</div>
   <div class="field"><input id="channelUsername" type="text" placeholder="@my_channel" autocomplete="off"></div>
-  <div class="foot">Public kanal username’ini kiriting. Siz kanal egasi yoki admini, bot esa post yuborish huquqiga ega admin bo‘lishi kerak.</div>
+  <button class="cta gray" onclick="submitChannel()">Username orqali ulash</button>
+  <div class="foot">Ro‘yxatdan tanlash Telegram’ning yangi versiyasini talab qiladi. Username orqali faqat public kanal ulanadi.</div>
 </div>
 
 <div class="alert" id="al"><div class="m"><b id="alT"></b><span id="alM"></span></div>

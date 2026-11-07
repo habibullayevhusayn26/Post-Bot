@@ -17,20 +17,20 @@ Copy-Item .env.example .env
 npm start
 ```
 
-Botga kanal username yuborishdan oldin uni kanalga administrator qilib qo‘shing va barcha administrator huquqlarini yoqing. Kanal username si public bo‘lishi kerak, masalan `@my_channel`.
+Botdagi **Kanal yoki guruh ulash** tugmasi orqali chatni Telegram ro‘yxatidan tanlang. Siz chat administratori bo‘lishingiz, bot esa administrator bo‘lishi kerak; kanalda botga post yuborish huquqini bering. Ro‘yxatdan tanlash imkoni bo‘lmasa, public kanalni `@my_channel` username’i bilan ulash mumkin.
 
 ## Mini App
 
 Mini App’ni serverga deploy qilish uchun botni public HTTPS domeni ortida ishga tushiring. Render’da `WEB_APP_URL` ko‘rsatilmagan bo‘lsa, bot `RENDER_EXTERNAL_URL` qiymatidan `/app` manzilini avtomatik hosil qiladi. Boshqa hostingda yoki alohida domen ishlatilsa, `.env` faylida `WEB_APP_URL` ni to‘liq Mini App manziliga sozlang, masalan `https://bot.example.com/app`. `PORT` hosting taqdim etgan portga, `MONGODB_URI` esa ishlaydigan MongoDB ulanishiga mos bo‘lishi kerak. `WEB_APP_URL` HTTP bo‘lsa bot ishga tushmaydi.
 
-Yangi kod deploy bo‘lgach botga `/start` yuboring: asosiy menyuda foydalanuvchi tugmalari ko‘rinadi. Mini App’da yuborilgan postlar statistikasi, kanallarni ulash/o‘chirish, profil, Premium to‘lovi va yordam bo‘limlari mavjud. Mini App orqali kanalga post yaratish, yuborish yoki rejalashtirish mumkin emas; post yuborish uchun botning **Post yaratish** tugmasidan foydalaning. Admin boshqaruv buyruqlari botdagi `/admin` bo‘limida qoladi. Kanal ulash uchun siz kanal egasi yoki administratori, bot esa post yuborish huquqiga ega administrator bo‘lishi kerak. API Telegram `initData` talab qilgani uchun Mini App’ni oddiy brauzerda emas, Telegram ichidan oching.
+Yangi kod deploy bo‘lgach botga `/start` yuboring: asosiy menyuda foydalanuvchi tugmalari ko‘rinadi. Mini App’da yuborilgan postlar statistikasi, kanal va guruhlarni ulash/o‘chirish, profil, Premium to‘lovi va yordam bo‘limlari mavjud. Chat tanlash Telegram’ning `requestChat` funksiyasi bor versiyasini talab qiladi; username orqali ulash usuli faqat public kanal uchun mavjud. Mini App orqali post yaratish, yuborish yoki rejalashtirish mumkin emas; post yuborish uchun botning **Post yaratish** tugmasidan foydalaning. Admin boshqaruv buyruqlari botdagi `/admin` bo‘limida qoladi. Siz kanal yoki guruh administratori, bot esa administrator bo‘lishi kerak; kanalda botga post yuborish huquqini bering. API Telegram `initData` talab qilgani uchun Mini App’ni oddiy brauzerda emas, Telegram ichidan oching.
 
 ## Asosiy buyruqlar
 
 - `/start` — botni boshlash
 - `/help` — botdan foydalanish bo‘yicha yordam
 - `/post` — post yaratish va kanalni tanlash
-- `/channels` — kanallarni ko‘rish va boshqarish
+- `/channels` — kanal va guruhlarni ko‘rish va boshqarish
 - `/stats` — post statistikasi
 - `/profile` — profil ma’lumotlari
 - `/premium` — premium tarif va to‘lov
@@ -39,7 +39,7 @@ Bot va Mini App faqat o‘zbek tilida ishlaydi; til tanlash funksiyasi mavjud em
 
 Bot xabarlari va klaviatura tugmalarida Telegram premium custom emoji’lar ishlatiladi. Oddiy matn va izohlarga emoji HTML formatida qo‘shiladi; Telegram custom emoji’ni qabul qilmasa, bot oddiy emoji bilan qayta yuboradi. Tugmalarga Telegram Bot API’dagi `icon_custom_emoji_id` va ko‘k (`primary`), yashil (`success`), qizil (`danger`) rang uslublari qo‘llanadi. Premium custom emoji ishlashi uchun bot Fragment’dan qo‘shimcha username olgan bo‘lishi yoki bot egasi Premium obunaga ega bo‘lib, bot shaxsiy, guruh yoki superguruh chatiga yuborishi kerak.
 
-Asosiy menyudagi **Post yaratish** tugmasi post yuboriladigan kanalni tanlaydi. **Kanallarim** kanal qo‘shish, kanallarni boshqarish yoki o‘chirish uchun ishlatiladi. Admin menyusi va `/admin` buyrug‘i faqat bot adminiga ko‘rinadi.
+Asosiy menyudagi **Post yaratish** tugmasi post yuboriladigan kanal yoki guruhni tanlaydi. **Kanallarim** kanal va guruhlarni ulash, boshqarish yoki o‘chirish uchun ishlatiladi. Admin menyusi va `/admin` buyrug‘i faqat bot adminiga ko‘rinadi.
 
 Ma’lumotlar `data.json` faylida saqlanadi. Tokenni HTML, Git yoki frontend kodiga yozmang. Siz yuborgan token chatga oshkor bo‘lganligi sababli BotFather’da `/revoke` orqali uni yangilang.
 

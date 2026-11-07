@@ -29,3 +29,17 @@ test('media download feature is removed from the bot and Mini App', () => {
   assert.doesNotMatch(htmlSource, /Media saqlash|mediaUrl|mediaDownload/);
   assert.doesNotMatch(appSource, /downloadMedia|\/media(?:['"`])/);
 });
+
+test('bot offers Telegram channel and group selection and validates shared chats', () => {
+  assert.match(botSource, /request_chat:\s*\{[\s\S]*?chat_is_channel:\s*true/);
+  assert.match(botSource, /request_chat:\s*\{[\s\S]*?chat_is_channel:\s*false/);
+  assert.match(botSource, /bot\.on\('message',[\s\S]*?ctx\.message\.chat_shared/);
+  assert.match(botSource, /findPostableChat\(ctx\.telegram,\s*ctx\.from\.id,\s*sharedChat\.chat_id,\s*expectedType\)/);
+});
+
+test('Mini App requests channel or group selection and verifies it on the server', () => {
+  assert.match(appSource, /tg\.requestChat/);
+  assert.match(appSource, /\/channels\/select/);
+  assert.match(botSource, /app\.post\('\/api\/mini-app\/channels\/select'/);
+  assert.match(botSource, /findPostableChat\(bot\.telegram,\s*req\.miniAppUser\.id,\s*chatId,\s*chatType\)/);
+});

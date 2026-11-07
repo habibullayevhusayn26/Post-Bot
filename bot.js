@@ -79,7 +79,7 @@ process.on('uncaughtException', (error) => {
 const fs = require('node:fs');
 const { Telegraf, Markup, session } = require('telegraf');
 const { verifyTelegramInitData } = require('./mini-app-auth');
-const { findPostableChannel } = require('./channel-access');
+const { findPostableChannel, findPostableChat } = require('./channel-access');
 const { buildMiniAppStatistics } = require('./mini-app-data');
 const {
   POLLING_LEASE_KEY,
@@ -437,7 +437,7 @@ const ADMIN_PUBLIC_USERNAME = '@habibullayev_28';
 const ADMIN_TG_ID = 7669387254;
 const text = {
   channels: { uz: 'Kanallarim' },
-  addChannel: { uz: 'Kanal qo\'shish' },
+  addChannel: { uz: 'Kanal yoki guruh ulash' },
   admin: { uz: 'Admin panel' },
   createPost: { uz: 'Post yaratish' },
   profile: { uz: 'Profilim' },
@@ -883,16 +883,16 @@ async function runWithConcurrency(items, limit, task) {
 function channelKeyboard(ctx, channels) {
   return Markup.inlineKeyboard([
     ...channels.map((channel) => [Markup.button.callback(`${channel.title}`, `channel:${channel.id}`)]),
-    [Markup.button.callback('Bir nechta kanalga yuborish', 'compose_multi')],
-    [Markup.button.callback(localizeReply(ctx, 'Kanal qo\'shish'), 'add_channel')]
+    [Markup.button.callback('Bir nechta chatga yuborish', 'compose_multi')],
+    [Markup.button.callback(localizeReply(ctx, 'Kanal yoki guruh ulash'), 'add_channel')]
   ]);
 }
 
 function postChannelKeyboard(ctx, channels) {
   return Markup.inlineKeyboard([
     ...channels.map((channel) => [Markup.button.callback(channel.title, `compose:${channel.id}`)]),
-    [Markup.button.callback('Bir nechta kanalga yuborish', 'compose_multi')],
-    [Markup.button.callback(localizeReply(ctx, 'Kanal qo\'shish'), 'add_channel')]
+    [Markup.button.callback('Bir nechta chatga yuborish', 'compose_multi')],
+    [Markup.button.callback(localizeReply(ctx, 'Kanal yoki guruh ulash'), 'add_channel')]
   ]);
 }
 
@@ -903,7 +903,7 @@ function multiChannelKeyboard(ctx, channels, selectedIds = []) {
       `${selected.has(String(channel.id)) ? '' : ''} ${channel.title}`,
       `multi_channel:${channel.id}`
     )]),
-    [Markup.button.callback('Kanallarni tasdiqlash', 'multi_channels_done')],
+    [Markup.button.callback('Chatlarni tasdiqlash', 'multi_channels_done')],
     [Markup.button.callback(localizeReply(ctx, 'Bekor qilish'), 'cancel')]
   ]);
 }
@@ -911,7 +911,7 @@ function multiChannelKeyboard(ctx, channels, selectedIds = []) {
 function channelActions(ctx, channelId) {
   return Markup.inlineKeyboard([
     [Markup.button.callback(localizeReply(ctx, 'Post yaratish'), `compose:${channelId}`)],
-    [Markup.button.callback(localizeReply(ctx, 'Kanalni o\'chirish'), `remove:${channelId}`)],
+    [Markup.button.callback(localizeReply(ctx, 'Chatni o\'chirish'), `remove:${channelId}`)],
     [Markup.button.callback(localizeReply(ctx, 'Orqaga'), 'channels')]
   ]);
 }
@@ -1167,26 +1167,64 @@ async function checkChannelPostingAccess(ctx, username) {
   return findPostableChannel(ctx.telegram, ctx.from.id, username);
 }
 
+function chatPickerKeyboard() {
+  const channelRights = { can_manage_chat: true, can_post_messages: true };
+  const groupRights = { can_manage_chat: true };
+  return {
+    reply_markup: {
+      keyboard: [
+        [{
+          text: 'Kanal tanlash',
+          request_chat: {
+            request_id: 73101,
+            chat_is_channel: true,
+            user_administrator_rights: channelRights,
+            bot_administrator_rights: channelRights,
+            request_title: true,
+            request_username: true
+          }
+        }],
+        [{
+          text: 'Guruh tanlash',
+          request_chat: {
+            request_id: 73102,
+            chat_is_channel: false,
+            user_administrator_rights: groupRights,
+            bot_administrator_rights: groupRights,
+            bot_is_member: true,
+            request_title: true,
+            request_username: true
+          }
+        }],
+        [{ text: 'Bekor qilish' }]
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: true,
+      input_field_placeholder: 'Ulash uchun kanal yoki guruhni tanlang'
+    }
+  };
+}
+
 async function showChannels(ctx) {
   const channels = userData(ctx.from.id).channels;
   if (!channels.length) {
     return ctx.reply(
-      'Hozircha kanal qo\'shilmagan. Boshlash uchun kanalingizni qo\'shing.',
+      'Hozircha kanal yoki guruh ulanmagan. Boshlash uchun chatni ulang.',
       Markup.inlineKeyboard([[Markup.button.callback(tr(ctx, 'addChannel'), 'add_channel')]])
     );
   }
-  return ctx.reply('Boshqarish uchun kanalni tanlang:', channelKeyboard(ctx, channels));
+  return ctx.reply('Boshqarish uchun kanal yoki guruhni tanlang:', channelKeyboard(ctx, channels));
 }
 
 async function startPostCreation(ctx) {
   const channels = userData(ctx.from.id).channels;
   if (!channels.length) {
     return ctx.reply(
-      'Post yaratishdan oldin kanal qo\'shing.',
+      'Post yaratishdan oldin kanal yoki guruhni ulang.',
       Markup.inlineKeyboard([[Markup.button.callback(tr(ctx, 'addChannel'), 'add_channel')]])
     );
   }
-  return ctx.reply('Post qaysi kanalga yuborilsin?', postChannelKeyboard(ctx, channels));
+  return ctx.reply('Post qaysi kanal yoki guruhga yuborilsin?', postChannelKeyboard(ctx, channels));
 }
 
 function helpText(ctx) {
@@ -1202,7 +1240,7 @@ function helpText(ctx) {
   if (isAdmin(ctx)) commands.push('/admin — admin panel');
   commands.push(
     '',
-    'Post yaratish uchun avval kanalingizni qo\'shing va botga administrator huquqlarini bering.'
+    'Post yaratish uchun kanal yoki guruhni ro‘yxatdan tanlang. Siz chat administratori, bot esa kanalga post yuborish huquqiga ega administrator bo‘lishi kerak.'
   );
   return commands.join('\n');
 }
@@ -1541,16 +1579,19 @@ bot.action('channels', async (ctx) => {
 bot.action('add_channel', async (ctx) => {
   await ctx.answerCbQuery();
   ctx.session = { step: 'channel' };
-  return ctx.reply('Kanal username sini yuboring, masalan: @my_channel');
+  return ctx.reply(
+    'Ulash uchun kanal yoki guruhni tanlang. Chatni ro‘yxatdan ko‘rmasangiz, public kanal username’ini yuborishingiz mumkin.',
+    chatPickerKeyboard()
+  );
 });
 
 bot.action('compose_multi', async (ctx) => {
   await ctx.answerCbQuery();
   const account = userData(ctx.from.id);
   if (!account.premium) return ctx.reply('Bu funksiya Premium foydalanuvchilar uchun mavjud.', mainKeyboard(ctx));
-  if (account.channels.length < 2) return ctx.reply('Bir nechta kanalga yuborish uchun kamida 2 ta kanal qo\'shing.', mainKeyboard(ctx));
+  if (account.channels.length < 2) return ctx.reply('Bir nechta chatga yuborish uchun kamida 2 ta chat ulang.', mainKeyboard(ctx));
   ctx.session = { step: 'multi_channel_select', selectedChannels: [] };
-  return ctx.reply('Post yuboriladigan kanallarni tanlang:', multiChannelKeyboard(ctx, account.channels));
+  return ctx.reply('Post yuboriladigan chatlarni tanlang:', multiChannelKeyboard(ctx, account.channels));
 });
 
 bot.action(/^multi_channel:(-?\d+)$/, async (ctx) => {
@@ -1558,7 +1599,7 @@ bot.action(/^multi_channel:(-?\d+)$/, async (ctx) => {
   if (!ctx.session || ctx.session.step !== 'multi_channel_select') return ctx.reply('Post yaratishni qaytadan boshlang.');
   const account = userData(ctx.from.id);
   const channel = account.channels.find((item) => String(item.id) === ctx.match[1]);
-  if (!channel) return ctx.reply('Kanal topilmadi.');
+  if (!channel) return ctx.reply('Chat topilmadi.');
   const selected = new Set((ctx.session.selectedChannels || []).map((id) => String(id)));
   if (selected.has(String(channel.id))) selected.delete(String(channel.id));
   else selected.add(String(channel.id));
@@ -1569,7 +1610,7 @@ bot.action(/^multi_channel:(-?\d+)$/, async (ctx) => {
 bot.action('multi_channels_done', async (ctx) => {
   await ctx.answerCbQuery();
   const selectedIds = ctx.session?.selectedChannels || [];
-  if (!selectedIds.length) return ctx.reply('Kamida bitta kanalni tanlang.');
+  if (!selectedIds.length) return ctx.reply('Kamida bitta chatni tanlang.');
   const channels = userData(ctx.from.id).channels.filter((channel) => selectedIds.includes(String(channel.id)));
   ctx.session = { step: 'photo', selectedChannels: channels, post: { buttons: [] } };
   return ctx.reply('Post uchun rasm, video, GIF yoki hujjat yuboring yoki «Rasmsiz» tugmasini bosing.', Markup.inlineKeyboard([
@@ -1581,10 +1622,10 @@ bot.action('multi_channels_done', async (ctx) => {
 bot.action(/^channel:(-?\d+)$/, async (ctx) => {
   await ctx.answerCbQuery();
   const channel = userData(ctx.from.id).channels.find((item) => String(item.id) === ctx.match[1]);
-  if (!channel) return ctx.reply('Kanal topilmadi.');
+  if (!channel) return ctx.reply('Chat topilmadi.');
   ctx.session ||= {};
   ctx.session.selectedChannel = channel;
-  return ctx.reply(`${channel.title} (${channel.username})`, channelActions(ctx, channel.id));
+  return ctx.reply(channel.username ? `${channel.title} (${channel.username})` : channel.title, channelActions(ctx, channel.id));
 });
 
 
@@ -1594,13 +1635,13 @@ bot.action(/^remove:(-?\d+)$/, async (ctx) => {
   const account = userData(ctx.from.id);
   account.channels = account.channels.filter((item) => String(item.id) !== ctx.match[1]);
   saveData();
-  return ctx.reply('Kanal ro\'yxatdan o\'chirildi.', mainKeyboard(ctx));
+  return ctx.reply('Chat ro\'yxatdan o\'chirildi.', mainKeyboard(ctx));
 });
 
 bot.action(/^compose:(-?\d+)$/, async (ctx) => {
   await ctx.answerCbQuery();
   const channel = userData(ctx.from.id).channels.find((item) => String(item.id) === ctx.match[1]);
-  if (!channel) return ctx.reply('Kanal topilmadi.');
+  if (!channel) return ctx.reply('Chat topilmadi.');
   ctx.session = { step: 'photo', selectedChannels: [channel], post: { buttons: [] } };
   return ctx.reply('Post uchun rasm, video, GIF yoki hujjat yuboring yoki «Rasmsiz» tugmasini bosing.', Markup.inlineKeyboard([
     [Markup.button.callback('Rasmsiz', 'no_photo')],
@@ -1832,6 +1873,34 @@ bot.action('cancel', async (ctx) => {
   return ctx.reply('Amal bekor qilindi', mainKeyboard(ctx));
 });
 
+bot.on('message', async (ctx, next) => {
+  const sharedChat = ctx.message.chat_shared;
+  if (!sharedChat) return next();
+  if (ctx.chat?.type !== 'private' || ![73101, 73102].includes(sharedChat.request_id)) return;
+
+  const expectedType = sharedChat.request_id === 73101 ? 'channel' : 'group';
+  try {
+    const channel = await findPostableChat(ctx.telegram, ctx.from.id, sharedChat.chat_id, expectedType);
+    const account = userData(ctx.from.id);
+    if (account.channels.some((item) => Number(item.id) === Number(channel.id))) {
+      reset(ctx);
+      return ctx.reply('Bu kanal yoki guruh allaqachon ulangan.', mainKeyboard(ctx));
+    }
+    if (!account.premium && account.channels.length >= 1) {
+      reset(ctx);
+      return ctx.reply('Bepul tarifda faqat bitta kanal yoki guruh ulash mumkin. Premium tarifni tanlang.', mainKeyboard(ctx));
+    }
+    account.channels.push(channel);
+    await saveData();
+    reset(ctx);
+    return ctx.reply(`${channel.title} chat ro‘yxatingizga qo‘shildi.`, mainKeyboard(ctx));
+  } catch (error) {
+    reset(ctx);
+    console.error('Shared chat validation failed:', error.response?.description || error.message);
+    return ctx.reply(`${error.message}\n\nBot chatda administrator ekanini tekshiring va qayta tanlang.`, mainKeyboard(ctx));
+  }
+});
+
 bot.on('text', async (ctx) => {
   const sessionState = ctx.session || {};
   const text = ctx.message.text;
@@ -2026,6 +2095,32 @@ app.post('/api/mini-app/channels', async (req, res) => {
     const channel = await checkChannelPostingAccess({ telegram: bot.telegram, from: { id: req.miniAppUser.id } }, username);
     if ((account.channels || []).some((item) => Number(item.id) === Number(channel.id))) {
       throw miniAppStatusError('Bu kanal allaqachon qo‘shilgan.', 409);
+    }
+    if (!account.premium && (account.channels || []).length >= 1) {
+      throw miniAppStatusError('Bepul tarifda faqat bitta kanal yoki guruh ulash mumkin. Premium tarifni tanlang.', 403);
+    }
+    await User.updateOne({ telegramId: account.telegramId }, { $push: { channels: channel } });
+    const updated = await getMiniAppAccount(account.telegramId);
+    return res.status(201).json({ channels: updated.channels });
+  } catch (error) {
+    return miniAppError(res, error);
+  }
+});
+
+app.post('/api/mini-app/channels/select', async (req, res) => {
+  try {
+    const account = await getMiniAppAccount(req.miniAppUser.id);
+    const chatId = Number(req.body?.chatId);
+    const chatType = req.body?.chatType;
+    if (!Number.isSafeInteger(chatId) || !['channel', 'group'].includes(chatType)) {
+      throw miniAppStatusError('Tanlangan kanal yoki guruh ma’lumoti noto‘g‘ri.');
+    }
+    const channel = await findPostableChat(bot.telegram, req.miniAppUser.id, chatId, chatType);
+    if ((account.channels || []).some((item) => Number(item.id) === Number(channel.id))) {
+      throw miniAppStatusError('Bu kanal yoki guruh allaqachon ulangan.', 409);
+    }
+    if (!account.premium && (account.channels || []).length >= 1) {
+      throw miniAppStatusError('Bepul tarifda faqat bitta kanal yoki guruh ulash mumkin. Premium tarifni tanlang.', 403);
     }
     await User.updateOne({ telegramId: account.telegramId }, { $push: { channels: channel } });
     const updated = await getMiniAppAccount(account.telegramId);

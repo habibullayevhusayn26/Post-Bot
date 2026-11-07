@@ -187,7 +187,7 @@ function decorateButton(button) {
   const { style, ...buttonWithoutLegacyStyle } = button;
   return {
     ...buttonWithoutLegacyStyle,
-    text: existingEmoji ? button.text.slice(existingEmoji.emoji.length).trimStart() : button.text,
+    text: existingEmoji ? button.text : `${emoji.emoji} ${button.text}`,
     icon_custom_emoji_id: button.icon_custom_emoji_id || emoji.id,
     button_style: buttonStyle
   };
@@ -216,40 +216,43 @@ function hasOurEmojiPrefix(text, parseMode, entities) {
   ) || false;
 }
 
-function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, (char) => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;'
-  })[char]);
-}
-
 function prefixCustomEmoji(text, payload, entityKey, parseModeKey) {
   if (typeof text !== 'string' || !text) return text;
   const entities = payload[entityKey];
   const parseMode = payload[parseModeKey];
   if (hasOurEmojiPrefix(text, parseMode, entities)) return text;
-  const emoji = getEmojiForText(text);
-  const prefixLength = emoji.emoji.length + 1;
+  const existingTextEmoji = Object.values(EMOJIS).find(({ emoji }) =>
+    text.startsWith(`${emoji} `) || text === emoji
+  );
+  const emoji = existingTextEmoji || getEmojiForText(text);
+  const hasVisibleEmojiPrefix = Boolean(existingTextEmoji) &&
+    !entities?.some((entity) => entity.offset === 0);
+  const prefixLength = hasVisibleEmojiPrefix ? 0 : emoji.emoji.length + 1;
 
   if (parseMode === 'HTML') {
+    if (hasVisibleEmojiPrefix) return text;
     if (Array.isArray(entities)) {
       payload[entityKey] = entities.map((entity) => ({ ...entity, offset: entity.offset + prefixLength }));
     }
     return `<tg-emoji emoji-id="${emoji.id}">${emoji.emoji}</tg-emoji> ${text}`;
   }
-  if (parseMode === 'MarkdownV2') return `![](tg://emoji?id=${emoji.id}) ${text}`;
-  if (parseMode) return `${emoji.emoji} ${text}`;
-
-  if (!Array.isArray(entities) || entities.length === 0) {
-    payload[parseModeKey] = 'HTML';
-    return `<tg-emoji emoji-id="${emoji.id}">${emoji.emoji}</tg-emoji> ${escapeHtml(text)}`;
+  if (parseMode === 'MarkdownV2') {
+    return hasVisibleEmojiPrefix ? text : `![](tg://emoji?id=${emoji.id}) ${text}`;
   }
+  if (parseMode) return hasVisibleEmojiPrefix ? text : `${emoji.emoji} ${text}`;
+  if (hasVisibleEmojiPrefix) {
+    payload[entityKey] = [
+      { type: 'custom_emoji', offset: 0, length: emoji.emoji.length, custom_emoji_id: emoji.id },
+      ...(Array.isArray(entities) ? entities : [])
+    ];
+    return text;
+  }
+
   payload[entityKey] = [
     { type: 'custom_emoji', offset: 0, length: emoji.emoji.length, custom_emoji_id: emoji.id },
-    ...entities.map((entity) => ({ ...entity, offset: entity.offset + prefixLength }))
+    ...(Array.isArray(entities)
+      ? entities.map((entity) => ({ ...entity, offset: entity.offset + prefixLength }))
+      : [])
   ];
   return `${emoji.emoji} ${text}`;
 }
@@ -1072,7 +1075,6 @@ async function handleStart(ctx) {
   reset(ctx);
   if (!await requiredSubscription(ctx)) return;
   return ctx.reply('Assalomu alaykum! Kanal postlarini boshqarish botiga xush kelibsiz.', {
-    parse_mode: 'HTML',
     reply_markup: mainKeyboard(ctx)
   });
 }
@@ -1336,8 +1338,7 @@ bot.command('post', startPostCreation);
 bot.command('stats', (ctx) => ctx.reply(premiumStatsText(ctx), mainKeyboard(ctx)));
 bot.command('settings', (ctx) => ctx.reply('Bot faqat o‘zbek tilida ishlaydi.', mainKeyboard(ctx)));
 bot.command('premium', (ctx) => ctx.reply(buildPremiumText(ctx), {
-  ...premiumInlineKeyboard(),
-  parse_mode: 'HTML'
+  ...premiumInlineKeyboard()
 }));
 bot.command('admin', (ctx) => {
   if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.', mainKeyboard(ctx));
@@ -1372,8 +1373,7 @@ bot.hears(['Yordam', menuButton('help', 'Yordam')], (ctx) => ctx.reply(helpText(
 
 bot.hears(['Premium', menuButton('premium', 'Premium')], (ctx) => {
   return ctx.reply(buildPremiumText(ctx), {
-    ...premiumInlineKeyboard(),
-    parse_mode: 'HTML'
+    ...premiumInlineKeyboard()
   });
 });
 

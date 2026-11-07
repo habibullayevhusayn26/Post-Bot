@@ -10,7 +10,7 @@ assert.notEqual(helperStart, -1, 'emoji implementation must remain in bot.js');
 assert.notEqual(helperEnd, -1, 'emoji implementation must be before bot startup');
 const helperModule = { exports: {} };
 vm.runInNewContext(
-  `${botSource.slice(helperStart, helperEnd)}\nmodule.exports = { EMOJIS, decorateReplyMarkup, decorateTelegramPayload, getEmojiForText, isCustomEmojiError, removePremiumEmoji };`,
+  `${botSource.slice(helperStart, helperEnd)}\nmodule.exports = { EMOJIS, decorateReplyMarkup, decorateTelegramPayload, getEmojiForText, isButtonStyleError, isCustomEmojiError, removeButtonStyles, removePremiumEmoji };`,
   { module: helperModule }
 );
 const {
@@ -18,7 +18,9 @@ const {
   decorateReplyMarkup,
   decorateTelegramPayload,
   getEmojiForText,
+  isButtonStyleError,
   isCustomEmojiError,
+  removeButtonStyles,
   removePremiumEmoji
 } = helperModule.exports;
 
@@ -168,8 +170,31 @@ test('keeps visible standard emoji labels without relying on premium button icon
   assert.equal(fallback.reply_markup.inline_keyboard[0][0].icon_custom_emoji_id, undefined);
 });
 
+test('removes unsupported button styles while preserving button text and callbacks', () => {
+  const decorated = decorateTelegramPayload('sendMessage', {
+    text: 'Menyu',
+    reply_markup: {
+      keyboard: [['Profilim']],
+      inline_keyboard: [[{ text: 'Bekor qilish', callback_data: 'cancel' }]]
+    }
+  });
+  const compatible = removeButtonStyles(removePremiumEmoji(decorated));
+
+  assert.equal(compatible.reply_markup.keyboard[0][0].text, '👤 Profilim');
+  assert.equal(compatible.reply_markup.keyboard[0][0].style, undefined);
+  assert.equal(compatible.reply_markup.inline_keyboard[0][0].text, '❌ Bekor qilish');
+  assert.equal(compatible.reply_markup.inline_keyboard[0][0].callback_data, 'cancel');
+  assert.equal(compatible.reply_markup.inline_keyboard[0][0].style, undefined);
+});
+
 test('recognizes Telegram errors caused by unavailable custom emoji', () => {
   assert.equal(isCustomEmojiError({ response: { error_code: 400, description: 'icon_custom_emoji_id is invalid' } }), true);
   assert.equal(isCustomEmojiError({ response: { error_code: 403, description: 'icon_custom_emoji_id is invalid' } }), false);
   assert.equal(isCustomEmojiError({ response: { error_code: 400, description: 'chat not found' } }), false);
+});
+
+test('recognizes unsupported Telegram keyboard styles for compatibility fallback', () => {
+  assert.equal(isButtonStyleError({ response: { error_code: 400, description: 'BUTTON_STYLE_INVALID' } }), true);
+  assert.equal(isButtonStyleError({ response: { error_code: 400, description: 'Bad Request: can\'t parse inline keyboard button' } }), true);
+  assert.equal(isButtonStyleError({ response: { error_code: 400, description: 'chat not found' } }), false);
 });

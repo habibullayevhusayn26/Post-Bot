@@ -323,10 +323,34 @@ function removePremiumEmoji(payload) {
   return changed ? result : null;
 }
 
+function removeButtonStyles(payload) {
+  let changed = false;
+  const result = { ...payload };
+  if (!result.reply_markup || typeof result.reply_markup !== 'object') return null;
+  const replyMarkup = { ...result.reply_markup };
+  for (const key of ['keyboard', 'inline_keyboard']) {
+    if (!Array.isArray(replyMarkup[key])) continue;
+    replyMarkup[key] = replyMarkup[key].map((row) => row.map((button) => {
+      if (!button || typeof button !== 'object' || !button.style) return button;
+      const { style, ...fallbackButton } = button;
+      changed = true;
+      return fallbackButton;
+    }));
+  }
+  result.reply_markup = replyMarkup;
+  return changed ? result : null;
+}
+
 function isCustomEmojiError(error) {
   const description = String(error?.response?.description || error?.description || error?.message || '');
   return error?.response?.error_code === 400 &&
     /custom.?emoji|icon_custom_emoji_id|can't parse entities|unsupported start tag/i.test(description);
+}
+
+function isButtonStyleError(error) {
+  const description = String(error?.response?.description || error?.description || error?.message || '');
+  return error?.response?.error_code === 400 &&
+    /button[_\s].{0,30}style|style[_\s].{0,30}button|reply keyboard button|inline keyboard button/i.test(description);
 }
 
 const token = process.env.BOT_TOKEN;
@@ -341,11 +365,14 @@ bot.telegram.callApi = async (method, payload, options) => {
   try {
     return await originalTelegramCallApi(method, decoratedPayload, options);
   } catch (error) {
-    if (!isCustomEmojiError(error)) throw error;
-    const fallbackPayload = removePremiumEmoji(decoratedPayload);
+    if (!isCustomEmojiError(error) && !isButtonStyleError(error)) throw error;
+    const emojiFallback = removePremiumEmoji(decoratedPayload);
+    const fallbackPayload = emojiFallback
+      ? removeButtonStyles(emojiFallback) || emojiFallback
+      : removeButtonStyles(decoratedPayload);
     if (!fallbackPayload) throw error;
     console.warn(
-      'Telegram custom emoji are unavailable for this message; retrying with standard emoji.',
+      'Telegram rejected premium emoji or button styling; retrying with standard emoji and compatible buttons.',
       error.response?.description || error.message
     );
     return originalTelegramCallApi(method, fallbackPayload, options);

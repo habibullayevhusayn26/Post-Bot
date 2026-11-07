@@ -23,6 +23,8 @@ const userSchema = new mongoose.Schema({
   language: { type: String, default: 'uz' },
   channels: { type: Array, default: [] },
   premium: { type: Boolean, default: false },
+  premiumPurchasedAt: { type: Date, default: null },
+  telegramPaymentChargeIds: { type: [String], default: [] },
   postLog: { type: Array, default: [] },
   templates: { type: Array, default: [] },
   publishedPosts: { type: Number, default: 0 },
@@ -411,6 +413,10 @@ bot.use(async (ctx, next) => {
     return await next();
   } catch (error) {
     console.error(`Update ${ctx.updateType} failed:`, error.response?.description || error.message);
+    if (ctx.preCheckoutQuery) {
+      await ctx.answerPreCheckoutQuery(false, 'To‘lovni tekshirishda xatolik yuz berdi. Qayta urinib ko‘ring.')
+        .catch((checkoutError) => console.error('Pre-checkout rejection failed:', checkoutError.message));
+    }
     await safeAnswerCbQuery(ctx);
     if (ctx?.reply) {
       await ctx.reply('Texnik xatolik yuz berdi. Qaytadan urinib ko\'ring.').catch(() => {});
@@ -427,8 +433,7 @@ const data = { users: {}, settings: {}, stats: {} };
 data.users ||= {};
 data.settings ||= {};
 data.settings.requiredChannels ||= [];
-data.settings.premiumCardNumber ||= '9860 0803 9258 5933';
-data.settings.premiumPrice ||= 10000;
+data.settings.premiumStarsPrice ||= 50;
 if (data.settings.requiredChannel && !Array.isArray(data.settings.requiredChannels)) {
   data.settings.requiredChannels = [data.settings.requiredChannel];
 }
@@ -525,8 +530,7 @@ function localizeReply(ctx, message) {
   return message;
 }
 data.settings.requiredChannels ||= [];
-data.settings.premiumCardNumber ||= '9860 0803 9258 5933';
-data.settings.premiumPrice ||= 10000;
+data.settings.premiumStarsPrice ||= 50;
 data.stats = { postsSent: 0, broadcastsSent: 0 };
 
 let mongoWriteQueue = Promise.resolve();
@@ -607,8 +611,7 @@ async function hydrateFromMongo() {
   data.settings.requiredChannels = config.channels?.length ? config.channels : (data.settings.requiredChannels || []);
   data.stats = { ...data.stats, ...(config.stats || {}) };
   data.settings.requiredChannels ||= [];
-  data.settings.premiumCardNumber ||= '9860 0803 9258 5933';
-  data.settings.premiumPrice ||= 10000;
+  data.settings.premiumStarsPrice ||= 50;
 }
 
 function userData(userId) {
@@ -1086,12 +1089,15 @@ async function chargeForPostIfNeeded(ctx) {
 }
 
 
+function premiumStarsPrice() {
+  const price = Number(data.settings?.premiumStarsPrice);
+  return Number.isSafeInteger(price) && price > 0 ? price : 50;
+}
 
 function buildPremiumText(ctx) {
   const account = userData(ctx.from.id);
   const status = account.premium ? 'Faol' : 'Faol emas';
-  const cardNumber = String(data.settings?.premiumCardNumber || '9860 0803 9258 5933').trim();
-  const price = Number(data.settings?.premiumPrice || 10000);
+  const price = premiumStarsPrice();
   return `Premium\n\n` +
     `Premium holati: ${status}\n` +
     `Post yuborish limiti: cheklanmagan\n` +
@@ -1101,15 +1107,39 @@ function buildPremiumText(ctx) {
     `Tugmalarni bir qatorga joylash\n` +
     `Post statistikasi\n` +
     `Video, GIF va hujjat postlari\n\n` +
-    `To'lov kartasi: <code>${cardNumber}</code>\n` +
-    `Humo plastik karta, ${price} so'm\n\n` +
-    `To'lovni amalga oshirgandan keyin quyidagi tugmani bosing:`;
+    `Tarif narxi: ${price} Stars\n\n` +
+    `Premium olish uchun quyidagi tugmani bosing:`;
 }
 
 function premiumInlineKeyboard() {
   return Markup.inlineKeyboard([
-    [Markup.button.callback("To'lov qildim ", 'premium_paid')]
+    [Markup.button.callback(`${premiumStarsPrice()} Stars bilan Premium olish`, 'premium_paid')]
   ]);
+}
+
+function parsePremiumInvoicePayload(payload) {
+  const match = /^premium_stars:v1:(\d+):(\d+):([a-f0-9-]{36})$/i.exec(String(payload || ''));
+  if (!match) return null;
+  const telegramId = Number(match[1]);
+  const amount = Number(match[2]);
+  if (!Number.isSafeInteger(telegramId) || !Number.isSafeInteger(amount) || amount <= 0) return null;
+  return { telegramId, amount };
+}
+
+function createPremiumInvoicePayload(telegramId, amount) {
+  return `premium_stars:v1:${telegramId}:${amount}:${crypto.randomUUID()}`;
+}
+
+async function createPremiumInvoiceLink(telegramId) {
+  const amount = premiumStarsPrice();
+  return bot.telegram.createInvoiceLink({
+    title: 'Premium obuna',
+    description: 'Post Bot Premium imkoniyatlaridan foydalaning.',
+    payload: createPremiumInvoicePayload(telegramId, amount),
+    provider_token: '',
+    currency: 'XTR',
+    prices: [{ label: 'Premium obuna', amount }]
+  });
 }
 
 function premiumStatsText(ctx) {
@@ -1254,8 +1284,8 @@ app.get('/api/mini-app/bootstrap', async (req, res) => {
       statistics: buildMiniAppStatistics(account, channels),
       premium: {
         active: Boolean(account.premium),
-        cardNumber: String(data.settings?.premiumCardNumber || '9860 0803 9258 5933').trim(),
-        price: Number(data.settings?.premiumPrice) || 10000
+        price: premiumStarsPrice(),
+        currency: 'XTR'
       },
       isAdmin: Number(req.miniAppUser.id) === ADMIN_TG_ID
     });
@@ -1281,6 +1311,7 @@ bot.use(session());
 
 bot.use(async (ctx, next) => {
   const isStart = /^\/start(?:@\w+)?(?:\s|$)/i.test(ctx.message?.text || '');
+  const isPaymentUpdate = ctx.updateType === 'pre_checkout_query' || Boolean(ctx.message?.successful_payment);
   if (ctx.from && !isStart) {
     await ensureUserInMongo(ctx);
   }
@@ -1288,7 +1319,7 @@ bot.use(async (ctx, next) => {
   const originalReply = ctx.reply.bind(ctx);
   ctx.reply = (message, ...args) => originalReply(localizeReply(ctx, message), ...args);
   const callbackData = ctx.callbackQuery?.data;
-  if (isStart || callbackData === 'check_subscription' || isAdmin(ctx)) return next();
+  if (isStart || isPaymentUpdate || callbackData === 'check_subscription' || isAdmin(ctx)) return next();
 
   if (await requiredSubscription(ctx)) {
     return next();
@@ -1382,72 +1413,36 @@ bot.action(/^admin:message_user:(\d+)$/, async (ctx) => {
 
 bot.action('premium_paid', async (ctx) => {
   await ctx.answerCbQuery();
-  const account = userData(ctx.from.id);
+  const account = await User.findOne({ telegramId: Number(ctx.from.id) }).select('premium').lean();
+  if (!account) return ctx.reply('Avval botda /start buyrug‘ini bosing.', mainKeyboard(ctx));
   if (account.premium) {
     return ctx.reply('Siz allaqachon premium tarifga egasiz.', mainKeyboard(ctx));
   }
-  ctx.session = { step: 'premium_payment_photo', buyer: ctx.from.id };
-  return ctx.reply(`To\'lov chekingizni (rasm) yuboring. Admin tekshiruv uchun yetib keladi.`, mainKeyboard(ctx));
+  const invoiceLink = await createPremiumInvoiceLink(ctx.from.id);
+  return ctx.reply('Telegram Stars orqali Premium obunani xarid qiling:', Markup.inlineKeyboard([
+    [Markup.button.url(`${premiumStarsPrice()} Stars to‘lash`, invoiceLink)]
+  ]));
 });
 
-bot.action(/^admin:premium_approve:(\d+)$/, async (ctx) => {
-  await ctx.answerCbQuery();
-  if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
+bot.on('pre_checkout_query', async (ctx) => {
+  const query = ctx.preCheckoutQuery;
+  const invoice = parsePremiumInvoicePayload(query.invoice_payload);
+  let valid = Boolean(invoice &&
+    invoice.telegramId === Number(query.from.id) &&
+    query.currency === 'XTR' &&
+    query.total_amount === invoice.amount);
 
-  const userId = Number(ctx.match[1]);
-  const account = userData(userId);
-  account.premium = true;
-  await saveData([userId], false);
-
-  try {
-    await bot.telegram.sendMessage(userId, `Premium tarif tasdiqlandi. Endi premium imkoniyatlardan foydalanishingiz mumkin.`, {
-      parse_mode: 'HTML',
-      reply_markup: mainKeyboard(ctx).reply_markup
-    });
-  } catch (error) {
-    console.error('Premium approve user message failed:', error?.response?.description || error.message);
+  if (valid) {
+    try {
+      const account = await User.findOne({ telegramId: Number(query.from.id) }).select('premium').lean();
+      valid = Boolean(account && !account.premium);
+    } catch (error) {
+      console.error('Premium pre-checkout validation failed:', error.response?.description || error.message);
+      valid = false;
+    }
   }
 
-  try {
-    await bot.telegram.sendMessage(ADMIN_TG_ID, `Premium so\'rovi tasdiqlandi. Foydalanuvchi ID: ${userId}`, {
-      parse_mode: 'HTML',
-      reply_markup: adminKeyboard(ctx).reply_markup
-    });
-  } catch (error) {
-    console.error('Premium approve admin notification failed:', error?.response?.description || error.message);
-  }
-
-  return ctx.reply('Premium tarif tasdiqlandi.', adminKeyboard(ctx));
-});
-
-bot.action(/^admin:premium_reject:(\d+)$/, async (ctx) => {
-  await ctx.answerCbQuery();
-  if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
-
-  const userId = Number(ctx.match[1]);
-  const account = userData(userId);
-  account.premium = false;
-  await saveData([userId], false);
-
-  try {
-    await bot.telegram.sendMessage(userId, `Premium so\'rovi rad etildi. Tekshiruvda muammo mavjud.`, {
-      parse_mode: 'HTML',
-      reply_markup: mainKeyboard(ctx).reply_markup
-    });
-  } catch (error) {
-    console.error('Premium reject user message failed:', error?.response?.description || error.message);
-  }
-
-  try {
-    await bot.telegram.sendMessage(ADMIN_TG_ID, `Premium so\'rovi rad etildi. Foydalanuvchi ID: ${userId}`, {
-      parse_mode: 'HTML',
-      reply_markup: adminKeyboard(ctx).reply_markup
-    });
-  } catch (error) {
-    console.error('Premium reject admin notification failed:', error?.response?.description || error.message);
-  }
-
-  return ctx.reply('Premium so\'rovi rad etildi.', adminKeyboard(ctx));
+  await ctx.answerPreCheckoutQuery(valid, valid ? undefined : 'To‘lov tasdiqlanmadi. Premium holatini tekshirib, qayta urinib ko‘ring.');
 });
 
 bot.action('admin:stats', async (ctx) => {
@@ -1488,25 +1483,17 @@ bot.action('admin:premium_settings', async (ctx) => {
   await ctx.answerCbQuery();
   if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
   ctx.session = { step: 'admin_premium_settings_menu' };
-  return ctx.reply('Premium to\'lov kartasi va narxini tanlang:', Markup.inlineKeyboard([
-    [Markup.button.callback('Karta raqamini o\'zgartirish', 'admin:premium_card_edit')],
-    [Markup.button.callback('Premium narxini o\'zgartirish', 'admin:premium_price_edit')],
+  return ctx.reply('Premium Stars tarif sozlamalari:', Markup.inlineKeyboard([
+    [Markup.button.callback('Stars narxini o\'zgartirish', 'admin:premium_price_edit')],
     [Markup.button.callback('Orqaga', 'admin:back')]
   ]));
-});
-
-bot.action('admin:premium_card_edit', async (ctx) => {
-  await ctx.answerCbQuery();
-  if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
-  ctx.session = { step: 'admin_premium_card_edit' };
-  return ctx.reply(`Yangi karta raqamini yuboring (hozirgi: ${String(data.settings?.premiumCardNumber || '9860 0803 9258 5933')})`, adminKeyboard(ctx));
 });
 
 bot.action('admin:premium_price_edit', async (ctx) => {
   await ctx.answerCbQuery();
   if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
-  ctx.session = { step: 'admin_premium_price_edit' };
-  return ctx.reply(`Yangi premium narxini yuboring (hozirgi: ${Number(data.settings?.premiumPrice || 10000)} so'm)`, adminKeyboard(ctx));
+  ctx.session = { step: 'admin_premium_stars_price_edit' };
+  return ctx.reply(`Yangi Premium narxini Stars sonida kiriting (hozirgi: ${premiumStarsPrice()} Stars).`, adminKeyboard(ctx));
 });
 
 bot.action('admin:back', async (ctx) => {
@@ -1641,27 +1628,6 @@ function saveComposerMedia(ctx, mediaType, mediaId, message) {
 }
 
 bot.on('photo', async (ctx) => {
-  if (ctx.session?.step === 'premium_payment_photo') {
-    const photoFileId = ctx.message.photo.at(-1).file_id;
-    const requester = ctx.from;
-    const user = userData(requester.id);
-    const cardText = `Premium so'rovi\n\n` +
-      `Foydalanuvchi: ${requester.username || requester.first_name || requester.id}\n` +
-      `Telegram ID: ${requester.id}\n` +
-      `Bot personal ID: ${user.personalId || '—'}\n\n` +
-      `To'lov cheki rasm yuborildi.`;
-    await bot.telegram.sendPhoto(ADMIN_TG_ID, photoFileId, {
-      caption: cardText,
-      parse_mode: 'HTML',
-      reply_markup: Markup.inlineKeyboard([
-        [Markup.button.callback('Premium berish', `admin:premium_approve:${requester.id}`)],
-        [Markup.button.callback('Premium bermaslik', `admin:premium_reject:${requester.id}`)]
-      ]).reply_markup
-    });
-    reset(ctx);
-    return ctx.reply(`To\'lov chekingiz adminga yuborildi. Tasdiq kutilmoqda.`, mainKeyboard(ctx));
-  }
-
   const message = ctx.message;
   return saveComposerMedia(ctx, 'photo', message.photo.at(-1).file_id, message);
 });
@@ -1850,6 +1816,52 @@ bot.action('cancel', async (ctx) => {
 });
 
 bot.on('message', async (ctx, next) => {
+  const payment = ctx.message.successful_payment;
+  if (payment) {
+    const invoice = parsePremiumInvoicePayload(payment.invoice_payload);
+    const chargeId = payment.telegram_payment_charge_id;
+    if (!invoice ||
+      invoice.telegramId !== Number(ctx.from.id) ||
+      payment.currency !== 'XTR' ||
+      payment.total_amount !== invoice.amount ||
+      !chargeId) {
+      console.error('Invalid Premium Stars payment received:', {
+        telegramId: ctx.from.id,
+        currency: payment.currency,
+        totalAmount: payment.total_amount,
+        invoicePayload: payment.invoice_payload
+      });
+      return ctx.reply('To‘lovni tekshirishda muammo yuz berdi. Yordam uchun administratorga murojaat qiling.');
+    }
+
+    try {
+      const account = await User.findOneAndUpdate(
+        { telegramId: Number(ctx.from.id), telegramPaymentChargeIds: { $ne: chargeId } },
+        {
+          $set: { premium: true, premiumPurchasedAt: new Date() },
+          $addToSet: { telegramPaymentChargeIds: chargeId }
+        },
+        { returnDocument: 'after' }
+      ).lean();
+      if (!account) {
+        const existing = await User.findOne({ telegramId: Number(ctx.from.id) }).select('telegramPaymentChargeIds').lean();
+        if (existing?.telegramPaymentChargeIds?.includes(chargeId)) {
+          return ctx.reply('Bu to‘lov avval qayd etilgan.', mainKeyboard(ctx));
+        }
+        throw new Error('Premium payment user record was not updated.');
+      }
+      data.users[String(ctx.from.id)] = accountFromMongo(account);
+      data.users[String(ctx.from.id)] = accountFromMongo(account);
+      return ctx.reply('⭐ To‘lov muvaffaqiyatli qabul qilindi. Premium faollashtirildi.', mainKeyboard(ctx));
+    } catch (error) {
+      console.error('Premium Stars payment activation failed:', error.response?.description || error.message);
+      await bot.telegram.sendMessage(ADMIN_TG_ID,
+        `Premium Stars to‘lovi kelib tushdi, ammo faollashtirishda xatolik yuz berdi.\nFoydalanuvchi ID: ${ctx.from.id}\nTo‘lov ID: ${chargeId}`
+      ).catch((notifyError) => console.error('Premium payment alert failed:', notifyError.message));
+      return ctx.reply('To‘lov qabul qilindi, ammo Premium faollashtirilmadi. Administratorga murojaat qiling.');
+    }
+  }
+
   const sharedChat = ctx.message.chat_shared;
   if (!sharedChat) return next();
   if (ctx.chat?.type !== 'private' || ![73101, 73102].includes(sharedChat.request_id)) return;
@@ -1882,28 +1894,16 @@ bot.on('text', async (ctx) => {
   const text = ctx.message.text;
   const trimmedText = text.trim();
 
-  if (sessionState.step === 'admin_premium_card_edit') {
+  if (sessionState.step === 'admin_premium_stars_price_edit') {
     if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
-    const cardNumber = trimmedText.replace(/\s+/g, ' ').trim();
-    if (!/^\d{4}(\s\d{4}){3}$/.test(cardNumber)) {
-      return ctx.reply('Karta raqami noto\'g\'ri formatda. Masalan: 9860 0803 9258 5933', adminKeyboard(ctx));
+    const price = Number(trimmedText);
+    if (!Number.isSafeInteger(price) || price <= 0) {
+      return ctx.reply('Stars narxini musbat butun son ko‘rinishida kiriting.', adminKeyboard(ctx));
     }
-    data.settings.premiumCardNumber = cardNumber;
+    data.settings.premiumStarsPrice = price;
     await saveData([], true);
     reset(ctx);
-    return ctx.reply(`Premium karta raqami yangilandi: ${cardNumber}`, adminKeyboard(ctx));
-  }
-
-  if (sessionState.step === 'admin_premium_price_edit') {
-    if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
-    const price = Number(trimmedText.replace(/\D/g, ''));
-    if (!Number.isFinite(price) || price <= 0) {
-      return ctx.reply('Premium narxini faqat musbat son ko\'rinishida kiriting.', adminKeyboard(ctx));
-    }
-    data.settings.premiumPrice = price;
-    await saveData([], true);
-    reset(ctx);
-    return ctx.reply(`Premium narxi yangilandi: ${price} so'm`, adminKeyboard(ctx));
+    return ctx.reply(`Premium narxi yangilandi: ${price} Stars`, adminKeyboard(ctx));
   }
 
   if (sessionState.step === 'required_subscription_channel') {
@@ -2127,39 +2127,12 @@ app.delete('/api/mini-app/channels/:channelId', async (req, res) => {
   }
 });
 
-app.post('/api/mini-app/premium/request', async (req, res) => {
+app.post('/api/mini-app/premium/invoice', async (req, res) => {
   try {
     const account = await getMiniAppAccount(req.miniAppUser.id);
     if (account.premium) throw miniAppStatusError('Siz allaqachon Premium tarifidasiz.', 409);
-
-    const photoMimeType = String(req.body?.photoMimeType || '');
-    const photoData = String(req.body?.photoData || '');
-    if (!['image/jpeg', 'image/png'].includes(photoMimeType) ||
-      photoData.length > 7_000_000 ||
-      !/^[A-Za-z0-9+/]+={0,2}$/.test(photoData)) {
-      throw miniAppStatusError('5 MB gacha bo‘lgan JPG yoki PNG to‘lov chekini yuboring.');
-    }
-    const receipt = Buffer.from(photoData, 'base64');
-    if (receipt.length > 5 * 1024 * 1024) {
-      throw miniAppStatusError('To‘lov cheki 5 MB dan kichik bo‘lishi kerak.');
-    }
-
-    const requester = req.miniAppUser;
-    await bot.telegram.sendPhoto(ADMIN_TG_ID, {
-      source: receipt,
-      filename: `premium-receipt.${photoMimeType === 'image/png' ? 'png' : 'jpg'}`
-    }, {
-      caption: `Premium so‘rovi\n\n` +
-        `Foydalanuvchi: ${requester.username ? `@${requester.username}` : requester.first_name || requester.id}\n` +
-        `Telegram ID: ${requester.id}\n` +
-        `Bot personal ID: ${account.personalId || '—'}\n\n` +
-        `Mini App orqali to‘lov cheki yuborildi.`,
-      reply_markup: Markup.inlineKeyboard([
-        [Markup.button.callback('Premium berish', `admin:premium_approve:${requester.id}`)],
-        [Markup.button.callback('Premium bermaslik', `admin:premium_reject:${requester.id}`)]
-      ]).reply_markup
-    });
-    return res.status(202).json({ ok: true, message: 'To‘lov cheki adminga yuborildi. Tasdiq kutilmoqda.' });
+    const url = await createPremiumInvoiceLink(account.telegramId);
+    return res.json({ url });
   } catch (error) {
     return miniAppError(res, error);
   }

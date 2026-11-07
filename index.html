@@ -164,6 +164,33 @@ html,body,.push{background:radial-gradient(90% 38% at 0% 0%,rgba(0,122,255,.2),t
 #bar button{position:relative;z-index:1;padding:6px 0 5px}
 #bar button span{font-size:24px;line-height:26px}
 #bar .ind{position:absolute;top:6px;bottom:6px;left:6px;width:calc((100% - 12px)/3);border-radius:100px;background:rgba(120,120,128,.2);transition:transform .55s var(--spring)}
+#bar .ind{display:none}
+#bar button.on::after{content:"";position:absolute;bottom:0;width:24px;height:3px;border-radius:3px;background:var(--blue)}
+.profile-row{min-height:56px;padding:14px 18px}
+.profile-row .t b{font-size:16px;font-weight:600}
+.profile-row .v{max-width:56%;text-align:right;overflow-wrap:anywhere}
+.profile-note{display:flex;align-items:flex-start;gap:10px;padding:15px 18px;color:var(--sub);font-size:14px}
+.profile-note svg{width:18px;height:18px;flex:none;margin-top:1px}
+.profile-note a{color:var(--blue);font-weight:600;text-decoration:none}
+.premium-row{min-height:68px}
+.premium-row .v{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.premium-badge,.premium-price{display:inline-flex;align-items:center;gap:7px;border-radius:30px;padding:6px 12px;font-size:14px;font-weight:650;white-space:nowrap}
+.premium-badge{color:#ff6259;background:rgba(255,69,58,.12);border:1px solid rgba(255,69,58,.55)}
+.premium-badge.active{color:#30d158;background:rgba(48,209,88,.12);border-color:rgba(48,209,88,.5)}
+.premium-badge i{width:8px;height:8px;border-radius:50%;background:currentColor}
+.premium-row .v small{font-size:12px;color:var(--sub)}
+.premium-price{color:#ffd166;background:rgba(255,159,10,.12);border:1px solid rgba(255,159,10,.45)}
+.premium-buy{margin-bottom:28px;background:linear-gradient(180deg,#ffc94d,#ffad12);color:#241600;box-shadow:0 10px 24px rgba(255,174,18,.24),inset 0 1px 0 rgba(255,255,255,.55)}
+.premium-buy .buy-content{display:inline-flex;align-items:center;justify-content:center;gap:10px}
+.premium-buy svg{width:22px;height:22px}
+.profile-help{padding:0}
+.help-row{min-height:92px;padding:16px 18px;gap:14px}
+.help-row .ic{width:40px;height:40px;border-radius:13px;background:rgba(10,132,255,.14)!important;color:var(--blue)}
+.help-row .ic .i{width:19px;height:19px}
+.help-row .t b{font-size:16px;font-weight:600}
+.help-row .t small{white-space:normal;line-height:1.35;font-size:14px}
+.help-row .chev::after{border-color:var(--sub);width:7px;height:7px}
+:root:not([data-theme=dark]) .premium-buy{color:#241600}
 .nav{background:linear-gradient(var(--bg) 55%,rgba(0,0,0,0));border:0;backdrop-filter:none;-webkit-backdrop-filter:none;padding-bottom:14px}
 .nav button{padding:9px 16px;border-radius:100px;font-weight:500}
 .sheet{border-radius:38px 38px 0 0;background:rgba(var(--gc),calc(.6 + var(--g)*.38));box-shadow:inset 0 1px 0 rgba(255,255,255,.5);padding-top:12px}
@@ -211,6 +238,9 @@ html,body,.push{background:radial-gradient(90% 38% at 0% 0%,rgba(0,122,255,.3),t
 <symbol id="i-bell" viewBox="0 0 24 24"><g class="s"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></g></symbol>
 <symbol id="i-link" viewBox="0 0 24 24"><g class="s"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></g></symbol>
 <symbol id="i-pen" viewBox="0 0 24 24"><g class="s"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></g></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24"><g class="s"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/></g></symbol>
+<symbol id="i-crown" viewBox="0 0 24 24"><g class="s"><path d="m2 8 5 4 5-7 5 7 5-4-2 12H4L2 8z"/><path d="M4 20h16"/></g></symbol>
+<symbol id="i-info" viewBox="0 0 24 24"><g class="s"><circle cx="12" cy="12" r="10"/><path d="M12 11v5"/><path d="M12 8h.01"/></g></symbol>
 <symbol id="i-moon" viewBox="0 0 24 24"><g class="s"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></g></symbol>
 <symbol id="i-img" viewBox="0 0 24 24"><g class="s"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></g></symbol>
 <symbol id="i-inbox" viewBox="0 0 24 24"><g class="s"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></g></symbol>
@@ -237,13 +267,12 @@ html,body,.push{background:radial-gradient(90% 38% at 0% 0%,rgba(0,122,255,.3),t
     <div class="group" id="profileInfo"></div>
     <div class="head">Premium</div>
     <div class="group" id="premiumInfo"></div>
-    <input id="receipt" type="file" accept="image/jpeg,image/png" hidden>
-    <button class="cta" id="premiumRequest" onclick="chooseReceipt()">To‘lov chekini yuborish</button>
+    <button class="cta premium-buy" id="premiumRequest" onclick="buyPremium()"><span class="buy-content"><svg class="i"><use href="#i-crown"/></svg>Premium olish</span></button>
     <div class="head" style="margin-top:22px">Yordam</div>
-    <div class="group">
-      <div class="row"><div class="t"><b>Kanal va guruhlarni ulash</b><small>Chatni ro‘yxatdan tanlang. Siz chat administratori, bot esa kanalga post yuborish huquqiga ega administrator bo‘lishi kerak.</small></div></div>
-      <div class="row"><div class="t"><b>Post yuborish</b><small>Post yaratish va yuborish Mini App’da mavjud emas. Botning asosiy menyusidan foydalaning.</small></div></div>
-      <div class="row"><div class="t"><b>Yordam xizmati</b><small>Botda /help buyrug‘ini yuboring.</small></div></div>
+    <div class="group profile-help">
+      <div class="row help-row"><div class="ic"><svg class="i"><use href="#i-link"/></svg></div><div class="t"><b>Kanal va guruhlarni ulash</b><small>Chatni ro‘yxatdan tanlang. Siz chat administratori bo‘lishingiz kerak.</small></div><span class="chev"></span></div>
+      <div class="row help-row"><div class="ic"><svg class="i"><use href="#i-pen"/></svg></div><div class="t"><b>Post yuborish</b><small>Post yaratish va yuborish botning asosiy menyusida mavjud.</small></div><span class="chev"></span></div>
+      <div class="row help-row"><div class="ic"><svg class="i"><use href="#i-chat"/></svg></div><div class="t"><b>Yordam xizmati</b><small>Botdagi /help buyrug‘i orqali yordam oling.</small></div><span class="chev"></span></div>
     </div>
   </section>
 

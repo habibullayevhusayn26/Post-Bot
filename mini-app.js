@@ -13,6 +13,7 @@ const state = {
   statistics: null,
   premium: null,
   isAdmin: false,
+  premiumInvoiceOpen: false,
   tab: 0
 };
 let toastTimer;
@@ -108,21 +109,31 @@ function renderProfile() {
     ['Foydalanuvchi nomi', user.username ? `@${user.username}` : 'Ko‘rsatilmagan'],
     ['Telegram ID', user.id || '—'],
     ['Botdagi ID', user.personalId || '—'],
-    ['A’zo bo‘lgan sana', formatDate(user.joinedAt)]
+    ['A’zo bo‘lgan sana', user.joinedAt
+      ? new Date(user.joinedAt).toLocaleString('uz-UZ', { dateStyle: 'medium', timeStyle: 'short' })
+      : '—']
   ];
-  if (state.isAdmin) profileRows.push(['Admin panel', 'Admin buyruqlari botdagi /admin bo‘limida.']);
   $('#profileInfo').innerHTML = profileRows.map(([label, value]) =>
-    `<div class="row"><div class="t"><b>${esc(label)}</b></div><span class="v">${esc(value)}</span></div>`
-  ).join('');
+    `<div class="row profile-row"><div class="t"><b>${esc(label)}</b></div><span class="v">${esc(value)}</span></div>`
+  ).join('') + (state.isAdmin
+    ? '<div class="profile-note"><svg class="i"><use href="#i-info"/></svg><span>Admin buyruqlari botdagi <a>/admin</a> bo‘limida.</span></div>'
+    : '');
 
   const premium = state.premium || {};
-  $('#premiumInfo').innerHTML = [
-    ['Holat', premium.active ? 'Faol' : 'Faol emas'],
-    ['Tarif narxi', `${Number(premium.price) || 10000} so‘m`],
-    ['To‘lov kartasi', premium.cardNumber || '—']
-  ].map(([label, value]) =>
-    `<div class="row"><div class="t"><b>${esc(label)}</b></div><span class="v">${esc(value)}</span></div>`
-  ).join('');
+  const price = Number(premium.price) || 50;
+  const formattedPrice = `${new Intl.NumberFormat('uz-UZ').format(price)} Stars`;
+  $('#premiumInfo').innerHTML = `
+    <div class="row profile-row premium-row">
+      <div class="t"><b>Holat</b></div>
+      <span class="v">
+        <span class="premium-badge${premium.active ? ' active' : ''}"><i></i>${premium.active ? 'Faol' : 'Faol emas'}</span>
+        <small>${premium.active ? 'Premium obuna faol' : 'Obuna mavjud emas'}</small>
+      </span>
+    </div>
+    <div class="row profile-row premium-row">
+      <div class="t"><b>Tarif narxi</b></div>
+      <span class="v"><span class="premium-price">★&nbsp; ${esc(formattedPrice)}</span></span>
+    </div>`;
   $('#premiumRequest').hidden = Boolean(premium.active);
 }
 
@@ -275,30 +286,52 @@ function removeChannel(id) {
   });
 }
 
-function chooseReceipt() {
-  $('#receipt').value = '';
-  $('#receipt').click();
-}
-
-async function submitReceipt() {
-  const file = $('#receipt').files[0];
-  if (!file) return;
-  if (file.size > 5 * 1024 * 1024 || !['image/jpeg', 'image/png'].includes(file.type)) {
-    toast('5 MB gacha bo‘lgan JPG yoki PNG to‘lov chekini tanlang.');
+async function buyPremium() {
+  if (state.premiumInvoiceOpen) return;
+  if (state.premium?.active) {
+    toast('Siz allaqachon Premium tarifidasiz.');
     return;
   }
+  if (typeof tg?.openInvoice !== 'function') {
+    toast('Telegram Stars to‘lovini ochib bo‘lmadi. Telegram ilovasini yangilang.');
+    return;
+  }
+  state.premiumInvoiceOpen = true;
+  $('#premiumRequest').disabled = true;
   try {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    let binary = '';
-    for (let index = 0; index < bytes.length; index += 0x8000) {
-      binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
-    }
-    const result = await request('/premium/request', {
+    const { url } = await request('/premium/invoice', {
       method: 'POST',
-      body: JSON.stringify({ photoData: btoa(binary), photoMimeType: file.type })
+      body: JSON.stringify({})
     });
-    toast(result.message || 'To‘lov cheki adminga yuborildi.');
+    if (!url) throw new Error('To‘lov havolasi yaratilmadi.');
+    tg.openInvoice(url, async (status) => {
+      state.premiumInvoiceOpen = false;
+      $('#premiumRequest').disabled = false;
+      if (status !== 'paid') {
+        if (status === 'failed') toast('To‘lov amalga oshmadi. Qayta urinib ko‘ring.');
+        return;
+      }
+
+      for (let attempt = 0; attempt < 5; attempt++) {
+        if (attempt) await new Promise((resolve) => setTimeout(resolve, 500));
+        try {
+          await reload();
+        } catch (error) {
+          if (attempt === 4) {
+            toast(error.message);
+            return;
+          }
+        }
+        if (state.premium?.active) {
+          toast('To‘lov muvaffaqiyatli. Premium faollashtirildi.');
+          return;
+        }
+      }
+      toast('To‘lov tasdiqlandi. Premium yangilanishi uchun biroz kuting.');
+    });
   } catch (error) {
+    state.premiumInvoiceOpen = false;
+    $('#premiumRequest').disabled = false;
     toast(error.message);
   }
 }
@@ -313,8 +346,6 @@ $('#chs').addEventListener('click', (event) => {
 $('#channelUsername').addEventListener('keydown', (event) => {
   if (event.key === 'Enter') submitChannel();
 });
-$('#receipt').addEventListener('change', submitReceipt);
-
 const initialTheme = localStorage.getItem('mini-app-theme') || (tg?.colorScheme === 'dark' ? 'dark' : 'light');
 setTheme(initialTheme);
 $('#dk').classList.toggle('on', initialTheme === 'dark');

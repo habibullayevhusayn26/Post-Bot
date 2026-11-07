@@ -17,6 +17,8 @@ Copy-Item .env.example .env
 npm start
 ```
 
+Loyihadagi asosiy JavaScript fayllari: `app.js` (bot/server), `mini-app.js` (Mini App interfeysi) va `channel.js` (chat ruxsatlari, Mini App yordamchilari va polling lease).
+
 Botdagi **Kanal yoki guruh ulash** tugmasi orqali chatni Telegram ro‘yxatidan tanlang. Siz chat administratori bo‘lishingiz, bot esa administrator bo‘lishi kerak; kanalda botga post yuborish huquqini bering. Ro‘yxatdan tanlash imkoni bo‘lmasa, public kanalni `@my_channel` username’i bilan ulash mumkin.
 
 ## Mini App

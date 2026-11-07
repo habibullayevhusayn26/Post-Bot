@@ -1,8 +1,8 @@
-require('dotenv').config();
+const path = require('node:path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 process.env.TZ = 'Asia/Tashkent';
 const mongoose = require('mongoose');
 const crypto = require('node:crypto');
-const path = require('node:path');
 
 const mongoUri = process.env.MONGODB_URI;
 if (!mongoUri) {
@@ -78,15 +78,16 @@ process.on('uncaughtException', (error) => {
 
 const fs = require('node:fs');
 const { Telegraf, Markup, session } = require('telegraf');
-const { verifyTelegramInitData } = require('./mini-app-auth');
-const { findPostableChannel, findPostableChat } = require('./channel-access');
-const { buildMiniAppStatistics } = require('./mini-app-data');
 const {
+  verifyTelegramInitData,
+  findPostableChannel,
+  findPostableChat,
+  buildMiniAppStatistics,
   POLLING_LEASE_KEY,
   POLLING_LEASE_RENEW_INTERVAL_MS,
   createLeaseExpiry,
   getLeaseRetryDelay
-} = require('./polling-lease');
+} = require('./channel');
 
 const EMOJIS = Object.freeze({
   phone: { emoji: '📱', id: '5407025283456835913' },
@@ -414,7 +415,8 @@ bot.use(async (ctx, next) => {
   }
 });
 
-const localDataPath = path.join(__dirname, 'data.json');
+const projectRoot = __dirname;
+const localDataPath = path.join(projectRoot, 'data.json');
 const renderDiskDataPath = '/opt/render/project/src/data/data.json';
 const legacyDataPath = fs.existsSync(renderDiskDataPath) ? renderDiskDataPath : localDataPath;
 const legacyData = fs.existsSync(legacyDataPath) ? JSON.parse(fs.readFileSync(legacyDataPath, 'utf8')) : { users: {} };
@@ -1255,13 +1257,13 @@ function miniAppError(res, error) {
 
 app.get('/app', (req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.sendFile(path.join(__dirname, 'index.html'));
+  res.sendFile(path.join(projectRoot, 'index.html'));
 });
 
 app.get('/mini-app.js', (req, res) => {
   res.set('Cache-Control', 'no-store');
   res.type('application/javascript');
-  res.sendFile(path.join(__dirname, 'mini-app.js'));
+  res.sendFile(path.join(projectRoot, 'mini-app.js'));
 });
 
 app.use('/api/mini-app', express.json({ limit: '8mb' }), (req, res, next) => {

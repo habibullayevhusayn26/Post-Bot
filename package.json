@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "description": "Telegram bot for managing channel posts with inline URL buttons",
-  "main": "bot.js",
+  "main": "app.js",
   "scripts": {
-    "start": "node bot.js",
-    "test": "node --test"
+    "start": "node app.js",
+    "test": "node --check app.js && node --check mini-app.js && node --check channel.js"
   },
   "engines": {
     "node": ">=18"

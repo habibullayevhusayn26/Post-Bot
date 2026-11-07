@@ -63,12 +63,22 @@ function getEmojiForText(value) {
 
 function decorateButton(button) {
   if (typeof button === 'string') {
-    const emoji = getEmojiForText(button);
-    return { text: button, icon_custom_emoji_id: emoji.id };
+    return prefixButtonEmoji(button);
   }
   if (!button || typeof button !== 'object' || typeof button.text !== 'string') return button;
-  if (button.icon_custom_emoji_id) return button;
-  return { ...button, icon_custom_emoji_id: getEmojiForText(button.text).id };
+  const decorated = { ...button, text: prefixButtonEmoji(button.text) };
+  if (CUSTOM_EMOJI_IDS.has(String(decorated.icon_custom_emoji_id))) {
+    delete decorated.icon_custom_emoji_id;
+  }
+  return decorated;
+}
+
+function prefixButtonEmoji(text) {
+  const emoji = getEmojiForText(text);
+  if (Object.values(EMOJIS).some(({ emoji: knownEmoji }) => text.startsWith(knownEmoji))) {
+    return text;
+  }
+  return `${emoji.emoji} ${text}`;
 }
 
 function decorateReplyMarkup(replyMarkup) {

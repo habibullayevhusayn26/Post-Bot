@@ -415,12 +415,27 @@ function isAdmin(ctx) {
   return ctx.from?.username?.toLowerCase() === ADMIN_USERNAME;
 }
 
+const menuEmojis = {
+  createPost: '✍️',
+  channels: '📢',
+  stats: '📊',
+  profile: '👤',
+  premium: '💎',
+  help: '❓',
+  videoSave: '📱',
+  settings: '⚙️'
+};
+
+function menuButton(key, label) {
+  return `${menuEmojis[key]} ${label}`;
+}
+
 function mainKeyboard(ctx) {
   const keyboard = [
-    [tr(ctx, 'createPost'), tr(ctx, 'channels')],
-    ['Post statistikasi', tr(ctx, 'profile')],
-    ['Premium', 'Yordam'],
-    ['Video saqlash', 'Sozlamalar']
+    [menuButton('createPost', tr(ctx, 'createPost')), menuButton('channels', tr(ctx, 'channels'))],
+    [menuButton('stats', 'Post statistikasi'), menuButton('profile', tr(ctx, 'profile'))],
+    [menuButton('premium', 'Premium'), menuButton('help', 'Yordam')],
+    [menuButton('videoSave', 'Video saqlash'), menuButton('settings', 'Sozlamalar')]
   ];
   if (isAdmin(ctx)) keyboard.push([tr(ctx, 'admin')]);
   return Markup.keyboard(keyboard).resize();
@@ -1116,32 +1131,32 @@ bot.command('channels', showChannels);
 
 // --- ESKI MA'LUMOTLARNI YUKLAB OLISH BUYRUG'I --
 
-bot.hears([...new Set(['Post yuborish', ...Object.values(text.createPost)])], startPostCreation);
-bot.hears(Object.values(text.videoSave), (ctx) => {
+bot.hears([...new Set(['Post yuborish', ...Object.values(text.createPost), ...Object.values(text.createPost).map((label) => menuButton('createPost', label))])], startPostCreation);
+bot.hears([...Object.values(text.videoSave), menuButton('videoSave', 'Video saqlash')], (ctx) => {
   ctx.session = { step: 'media_url' };
   return ctx.reply('Ijtimoiy tarmoqdan rasm/video URL yuboring:', Markup.removeKeyboard());
 });
-bot.hears([...new Set(['Kanallar ro\'yxati', ...Object.values(text.channels)])], showChannels);
+bot.hears([...new Set(['Kanallar ro\'yxati', ...Object.values(text.channels), ...Object.values(text.channels).map((label) => menuButton('channels', label))])], showChannels);
 bot.hears(Object.values(text.addChannel), (ctx) => {
   ctx.session = { step: 'channel' };
   ctx.reply('Kanal username sini yuboring, masalan: @my_channel');
 });
 
-bot.hears(Object.values(text.profile), (ctx) => {
+bot.hears([...Object.values(text.profile), ...Object.values(text.profile).map((label) => menuButton('profile', label))], (ctx) => {
   return ctx.reply(buildProfileText(ctx), mainKeyboard(ctx));
 });
 
-bot.hears('Sozlamalar', (ctx) => ctx.reply('Bot faqat o‘zbek tilida ishlaydi.', mainKeyboard(ctx)));
-bot.hears('Yordam', (ctx) => ctx.reply(helpText(ctx), mainKeyboard(ctx)));
+bot.hears(['Sozlamalar', menuButton('settings', 'Sozlamalar')], (ctx) => ctx.reply('Bot faqat o‘zbek tilida ishlaydi.', mainKeyboard(ctx)));
+bot.hears(['Yordam', menuButton('help', 'Yordam')], (ctx) => ctx.reply(helpText(ctx), mainKeyboard(ctx)));
 
-bot.hears('Premium', (ctx) => {
+bot.hears(['Premium', menuButton('premium', 'Premium')], (ctx) => {
   return ctx.reply(buildPremiumText(ctx), {
     ...premiumInlineKeyboard(),
     parse_mode: 'HTML'
   });
 });
 
-bot.hears('Post statistikasi', (ctx) => {
+bot.hears(['Post statistikasi', menuButton('stats', 'Post statistikasi')], (ctx) => {
   return ctx.reply(premiumStatsText(ctx), mainKeyboard(ctx));
 });
 

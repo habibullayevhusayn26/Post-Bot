@@ -22,15 +22,17 @@ test('chooses a matching emoji for Uzbek labels and falls back to a message emoj
   assert.equal(getEmojiForText('Noma’lum amal').id, EMOJIS.message.id);
 });
 
-test('adds custom emoji icons to inline and reply keyboard buttons', () => {
+test('adds visible standard emoji to inline and reply keyboard button labels', () => {
   const decorated = decorateReplyMarkup({
     inline_keyboard: [[{ text: 'Postni tasdiqlash', callback_data: 'publish' }]],
     keyboard: [['Profilim', { text: 'Mini App', web_app: { url: 'https://example.com' } }]]
   });
 
-  assert.equal(decorated.inline_keyboard[0][0].icon_custom_emoji_id, EMOJIS.done.id);
-  assert.equal(decorated.keyboard[0][0].icon_custom_emoji_id, EMOJIS.user.id);
-  assert.equal(decorated.keyboard[0][1].icon_custom_emoji_id, EMOJIS.message.id);
+  assert.equal(decorated.inline_keyboard[0][0].text, '✅ Postni tasdiqlash');
+  assert.equal(decorated.keyboard[0][0], '👤 Profilim');
+  assert.equal(decorated.keyboard[0][1].text, '💬 Mini App');
+  assert.equal(decorated.inline_keyboard[0][0].icon_custom_emoji_id, undefined);
+  assert.equal(decorated.keyboard[0][1].icon_custom_emoji_id, undefined);
 });
 
 test('prefixes plain text with a custom emoji entity and shifts existing entity offsets', () => {
@@ -73,7 +75,7 @@ test('removes generated premium emoji metadata for an API-compatible retry', () 
   assert.equal(fallback.reply_markup.inline_keyboard[0][0].icon_custom_emoji_id, undefined);
 });
 
-test('preserves visible standard emoji labels when Telegram rejects custom button icons', () => {
+test('keeps visible standard emoji labels without relying on premium button icons', () => {
   const decorated = decorateTelegramPayload('sendMessage', {
     text: 'Menyu',
     reply_markup: {
@@ -83,7 +85,7 @@ test('preserves visible standard emoji labels when Telegram rejects custom butto
   });
   const fallback = removePremiumEmoji(decorated);
 
-  assert.equal(fallback.reply_markup.keyboard[0][0].text, '👤 Profilim');
+  assert.equal(fallback.reply_markup.keyboard[0][0], '👤 Profilim');
   assert.equal(fallback.reply_markup.inline_keyboard[0][0].text, '📊 Statistika');
   assert.equal(fallback.reply_markup.inline_keyboard[0][0].icon_custom_emoji_id, undefined);
 });

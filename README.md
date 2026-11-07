@@ -19,6 +19,12 @@ npm start
 
 Botga kanal username yuborishdan oldin uni kanalga administrator qilib qo‘shing va barcha administrator huquqlarini yoqing. Kanal username si public bo‘lishi kerak, masalan `@my_channel`.
 
+## Mini App
+
+Mini App’ni serverga deploy qilish uchun botni public HTTPS domeni ortida ishga tushiring va `.env` faylida `WEB_APP_URL` ni Mini App manziliga sozlang, masalan `https://bot.example.com/app`. `PORT` hosting taqdim etgan portga, `MONGODB_URI` esa ishlaydigan MongoDB ulanishiga mos bo‘lishi kerak. `WEB_APP_URL` HTTP bo‘lsa bot ishga tushmaydi.
+
+Botni qayta ishga tushirgach `/start` yuboring: asosiy menyuda **Postlar Mini App** tugmasi ko‘rinadi. Mini App kanalga post yuborish va rejalashtirish, rasm hamda URL tugma qo‘shish, kanallarni boshqarish va post sozlamalarini saqlash imkonini beradi. Kanalga post yuborish uchun bot u yerda administrator bo‘lishi kerak. Mini App’ni brauzerda emas, Telegram ichidan oching.
+
 ## Asosiy buyruqlar
 
 - `/start` — botni boshlash

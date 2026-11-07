@@ -21,9 +21,9 @@ Botga kanal username yuborishdan oldin uni kanalga administrator qilib qo‘shin
 
 ## Mini App
 
-Mini App’ni serverga deploy qilish uchun botni public HTTPS domeni ortida ishga tushiring va `.env` faylida `WEB_APP_URL` ni Mini App manziliga sozlang, masalan `https://bot.example.com/app`. `PORT` hosting taqdim etgan portga, `MONGODB_URI` esa ishlaydigan MongoDB ulanishiga mos bo‘lishi kerak. `WEB_APP_URL` HTTP bo‘lsa bot ishga tushmaydi.
+Mini App’ni serverga deploy qilish uchun botni public HTTPS domeni ortida ishga tushiring. Render’da `WEB_APP_URL` ko‘rsatilmagan bo‘lsa, bot `RENDER_EXTERNAL_URL` qiymatidan `/app` manzilini avtomatik hosil qiladi. Boshqa hostingda yoki alohida domen ishlatilsa, `.env` faylida `WEB_APP_URL` ni to‘liq Mini App manziliga sozlang, masalan `https://bot.example.com/app`. `PORT` hosting taqdim etgan portga, `MONGODB_URI` esa ishlaydigan MongoDB ulanishiga mos bo‘lishi kerak. `WEB_APP_URL` HTTP bo‘lsa bot ishga tushmaydi.
 
-Botni qayta ishga tushirgach `/start` yuboring: asosiy menyuda **Postlar Mini App** tugmasi ko‘rinadi. Mini App kanalga post yuborish va rejalashtirish, rasm hamda URL tugma qo‘shish, kanallarni boshqarish va post sozlamalarini saqlash imkonini beradi. Kanalga post yuborish uchun bot u yerda administrator bo‘lishi kerak. Mini App’ni brauzerda emas, Telegram ichidan oching.
+Yangi kod deploy bo‘lgach botga `/start` yuboring: asosiy menyuda **Postlar Mini App** tugmasi ko‘rinadi. Uni ko‘rmasangiz `/app` buyrug‘ini yuboring. Mini App kanalga post yuborish va rejalashtirish, rasm hamda URL tugma qo‘shish, kanallarni boshqarish va post sozlamalarini saqlash imkonini beradi. Kanalga post yuborish uchun bot u yerda administrator bo‘lishi kerak. API Telegram `initData` talab qilgani uchun Mini App’ni oddiy brauzerda emas, Telegram ichidan oching.
 
 ## Asosiy buyruqlar
 

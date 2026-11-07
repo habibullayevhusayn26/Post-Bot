@@ -36,10 +36,16 @@ const botConfigSchema = new mongoose.Schema({
   maintenanceMode: { type: Boolean, default: false },
   settings: { type: mongoose.Schema.Types.Mixed, default: {} },
   stats: { type: mongoose.Schema.Types.Mixed, default: {} },
+  leaseOwner: { type: String },
+  leaseExpiresAt: { type: Date },
 }, { versionKey: false });
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 const BotConfig = mongoose.models.BotConfig || mongoose.model('BotConfig', botConfigSchema);
+const BOT_POLLING_LEASE_KEY = 'telegram_polling_lease';
+const BOT_POLLING_LEASE_MS = 60000;
+const BOT_POLLING_RENEW_INTERVAL_MS = 15000;
+const botInstanceId = require('node:crypto').randomUUID();
 
 const express = require('express');
 const app = express();
@@ -51,7 +57,7 @@ app.get('/health', (req, res) => res.status(200).json({
   mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
 }));
 
-app.listen(port, '0.0.0.0', () => {
+const server = app.listen(port, '0.0.0.0', () => {
   console.log(`Express server ${port} portda ishlayapti.`);
 });
 
@@ -76,8 +82,6 @@ if (!token) {
 
 const bot = new Telegraf(token);
 const BOT_TIMEZONE = 'Asia/Tashkent';
-const PREMIUM_EMOJI_TAG = '<tg-emoji emoji-id="5084974483685507801">💜</tg-emoji>';
-const CANCEL_EMOJI_TAG = '<tg-emoji emoji-id="5199785165735367039">⚡️</tg-emoji>';
 
 async function safeAnswerCbQuery(ctx) {
   if (!ctx.callbackQuery) return;
@@ -99,34 +103,6 @@ bot.use(async (ctx, next) => {
     }
   }
 });
-
-function prefixPremiumEmojiIfMissing(text) {
-  if (typeof text !== 'string') return text;
-  if (/<tg-emoji\s+emoji-id=\"[^"]+\">[\s\S]*?<\/tg-emoji>/.test(text)) return text;
-  return `${PREMIUM_EMOJI_TAG} ${text}`;
-}
-
-const originalSendMessage = bot.telegram.sendMessage.bind(bot.telegram);
-bot.telegram.sendMessage = async (chatId, text, extra = {}) => {
-  const enrichedText = prefixPremiumEmojiIfMissing(text);
-  const enrichedExtra = { ...extra };
-  if (enrichedExtra.parse_mode === undefined && enrichedText.includes('<tg-emoji')) {
-    enrichedExtra.parse_mode = 'HTML';
-  }
-  return originalSendMessage(chatId, enrichedText, enrichedExtra);
-};
-
-const originalSendPhoto = bot.telegram.sendPhoto.bind(bot.telegram);
-bot.telegram.sendPhoto = async (chatId, photo, extra = {}) => {
-  const enrichedExtra = { ...extra };
-  if (typeof enrichedExtra.caption === 'string') {
-    enrichedExtra.caption = prefixPremiumEmojiIfMissing(enrichedExtra.caption);
-  }
-  if (enrichedExtra.parse_mode === undefined && typeof enrichedExtra.caption === 'string' && enrichedExtra.caption.includes('<tg-emoji')) {
-    enrichedExtra.parse_mode = 'HTML';
-  }
-  return originalSendPhoto(chatId, photo, enrichedExtra);
-};
 
 const localDataPath = path.join(__dirname, 'data.json');
 const renderDiskDataPath = '/opt/render/project/src/data/data.json';
@@ -153,15 +129,15 @@ const languages = {
   uz: 'O\'zbekcha', en: 'English', ru: 'Русский'
 };
 const text = {
-  welcome: { uz: '<tg-emoji emoji-id="5463392464314315076">👉</tg-emoji> Tilni tanlang:', en: '<tg-emoji emoji-id="5463392464314315076">👉</tg-emoji> Choose your language:', ru: '<tg-emoji emoji-id="5463392464314315076">👉</tg-emoji> Выберите язык:', ar: '<tg-emoji emoji-id="5463392464314315076">👉</tg-emoji> اختر لغتك:', tr: '<tg-emoji emoji-id="5463392464314315076">👉</tg-emoji> Dilinizi seçin:', zh: '<tg-emoji emoji-id="5463392464314315076">👉</tg-emoji> 请选择语言：', ko: '<tg-emoji emoji-id="5463392464314315076">👉</tg-emoji> 언어를 선택하세요:', tg: '<tg-emoji emoji-id="5463392464314315076">👉</tg-emoji> Забонро интихоб кунед:' },
-  channels: { uz: '📢 Kanallar ro\'yxati', en: '📢 Channel list', ru: '📢 Список каналов', ar: '📢 قائمة القنوات', tr: '📢 Kanal listesi', zh: '📢 频道列表', ko: '📢 채널 목록', tg: '📢 Рӯйхати каналҳо' },
-  addChannel: { uz: '➕ Kanal qo\'shish', en: '➕ Add channel', ru: '➕ Добавить канал', ar: '➕ إضافة قناة', tr: '➕ Kanal ekle', zh: '➕ 添加频道', ko: '➕ 채널 추가', tg: '➕ Иловаи kanal' },
+  welcome: { uz: 'Tilni tanlang:', en: 'Choose your language:', ru: 'Выберите язык:', ar: 'اختر لغتك:', tr: 'Dilinizi seçin:', zh: '请选择语言：', ko: '언어를 선택하세요:', tg: 'Забонро интихоб кунед:' },
+  channels: { uz: 'Kanallar ro\'yxati', en: 'Channel list', ru: 'Список каналов', ar: 'قائمة القنوات', tr: 'Kanal listesi', zh: '频道列表', ko: '채널 목록', tg: 'Рӯйхати каналҳо' },
+  addChannel: { uz: 'Kanal qo\'shish', en: 'Add channel', ru: 'Добавить канал', ar: 'إضافة قناة', tr: 'Kanal ekle', zh: '添加频道', ko: '채널 추가', tg: 'Иловаи kanal' },
   settings: { uz: 'Sozlamalar', en: 'Settings', ru: 'Настройки', ar: 'الإعدادات', tr: 'Ayarlar', zh: '设置', ko: '설정', tg: 'Танзимот' },
-  admin: { uz: '🛠 Admin panel', en: '🛠 Admin panel', ru: '🛠 Панель администратора', ar: '🛠 لوحة المشرف', tr: '🛠 Yönetici paneli', zh: '🛠 管理员面板', ko: '🛠 관리자 패널', tg: '🛠 Панели админ' },
-  languageSaved: { uz: '✅ Til saqlandi.', en: '✅ Language saved.', ru: '✅ Язык сохранён.', ar: '✅ تم حفظ اللغة.', tr: '✅ Dil kaydedildi.', zh: '✅ 语言已保存。', ko: '✅ 언어가 저장되었습니다.', tg: '✅ Забон нигоҳ дошта шуд.' },
-  createPost: { uz: '📨 Post yuborish', en: '📨 Create Post', ru: '📨 Создать пост', ar: '📨 إنشاء منشور', tr: '📨 Gönderi oluştur', zh: '📨 创建帖子', ko: '📨 게시물 만들기', tg: '📨 Эҷоди пост' },
-  videoSave: { uz: '🎬 Video saqlash', en: '🎬 Save video', ru: '🎬 Сохранить видео', ar: '🎬 حفظ فيديو', tr: '🎬 Video kaydet', zh: '🎬 保存视频', ko: '🎬 영상 저장', tg: '🎬 Сабти видео' },
-  profile: { uz: '<tg-emoji emoji-id="5461117441612462242">🙂</tg-emoji> Profilim', en: '<tg-emoji emoji-id="5461117441612462242">🙂</tg-emoji> My Profile', ru: '<tg-emoji emoji-id="5461117441612462242">🙂</tg-emoji> Мой профиль', ar: '<tg-emoji emoji-id="5461117441612462242">🙂</tg-emoji> صفحتي', tr: '<tg-emoji emoji-id="5461117441612462242">🙂</tg-emoji> Profilim', zh: '<tg-emoji emoji-id="5461117441612462242">🙂</tg-emoji> 我的资料', ko: '<tg-emoji emoji-id="5461117441612462242">🙂</tg-emoji> 내 프로필', tg: '<tg-emoji emoji-id="5461117441612462242">🙂</tg-emoji> Профили ман' },
+  admin: { uz: 'Admin panel', en: 'Admin panel', ru: 'Панель администратора', ar: 'لوحة المشرف', tr: 'Yönetici paneli', zh: '管理员面板', ko: '관리자 패널', tg: 'Панели админ' },
+  languageSaved: { uz: 'Til saqlandi.', en: 'Language saved.', ru: 'Язык сохранён.', ar: 'تم حفظ اللغة.', tr: 'Dil kaydedildi.', zh: '语言已保存。', ko: '언어가 저장되었습니다.', tg: 'Забон нигоҳ дошта шуд.' },
+  createPost: { uz: 'Post yuborish', en: 'Create Post', ru: 'Создать пост', ar: 'إنشاء منشور', tr: 'Gönderi oluştur', zh: '创建帖子', ko: '게시물 만들기', tg: 'Эҷоди пост' },
+  videoSave: { uz: 'Video saqlash', en: 'Save video', ru: 'Сохранить видео', ar: 'حفظ فيديو', tr: 'Video kaydet', zh: '保存视频', ko: '영상 저장', tg: 'Сабти видео' },
+  profile: { uz: 'Profilim', en: 'My Profile', ru: 'Мой профиль', ar: 'صفحتي', tr: 'Profilim', zh: '我的资料', ko: '내 프로필', tg: 'Профили ман' },
   botId: { uz: 'Botdagi ID', en: 'Bot ID', ru: 'ID бота', ar: 'معرف البوت', tr: 'Bot ID', zh: '机器人 ID', ko: '봇 ID', tg: 'ID-и бот' },
   telegramId: { uz: 'Telegram ID', en: 'Telegram ID', ru: 'Telegram ID', ar: 'معرف تلغрам', tr: 'Telegram ID', zh: 'Telegram ID', ko: '텔레그램 ID', tg: 'ID-и Телеграм' },
   username: { uz: 'Username', en: 'Username', ru: 'Username', ar: 'اسم المستخدم', tr: 'Kullanıcı adı', zh: '用户名', ko: '사용자 이름', tg: 'Номи корбар' },
@@ -231,35 +207,30 @@ const replyTranslations = {
     'Yangi miqdorni kiriting (ayirish uchun).': 'Миқдори навро ворид кунед (барои кам кардан).' }
 };
 const keyboardTranslations = {
-  en: { '➕ Kanal qo\'shish': '➕ Add channel', '✍️ Post yaratish': '✍️ Create post', '🗑 Kanalni o\'chirish': '🗑 Remove channel', '⬅️ Orqaga': '⬅️ Back', '🔗 Havolali tugma qo\'shish': '🔗 Add URL button', '✅ Postni yuborish': '✅ Publish post', '❌ Bekor qilish': '❌ Cancel', '🔵 Ko\'k': '🔵 Blue', '🟢 Yashil': '🟢 Green', '🔴 Qizil': '🔴 Red', '📊 Statistika': '📊 Statistics', '📣 Barchaga post yuborish': '📣 Broadcast post', '📢 Majburiy obunani sozlash': '📢 Set required subscription', '❌ Majburiy obunani o\'chirish': '❌ Disable required subscription', '📢 Kanalga obuna bo\'lish': '📢 Subscribe to channel', '✅ Obunani tekshirish': '✅ Check subscription' },
-  ru: { '➕ Kanal qo\'shish': '➕ Добавить канал', '✍️ Post yaratish': '✍️ Создать пост', '🗑 Kanalni o\'chirish': '🗑 Удалить канал', '⬅️ Orqaga': '⬅️ Назад', '🔗 Havolali tugma qo\'shish': '🔗 Добавить URL-кнопку', '✅ Postni yuborish': '✅ Опубликовать', '❌ Bekor qilish': '❌ Отмена', '🔵 Ko\'k': '🔵 Синий', '🟢 Yashil': '🟢 Зелёный', '🔴 Qizil': '🔴 Красный', '📊 Statistika': '📊 Статистика', '📣 Barchaga post yuborish': '📣 Рассылка поста', '📢 Majburiy obunani sozlash': '📢 Настроить подписку', '❌ Majburiy obunani o\'chirish': '❌ Отключить подписку', '📢 Kanalga obuna bo\'lish': '📢 Подписаться', '✅ Obunani tekshirish': '✅ Проверить подписку' },
-  tr: { '➕ Kanal qo\'shish': '➕ Kanal ekle', '✍️ Post yaratish': '✍️ Gönderi oluştur', '🗑 Kanalni o\'chirish': '🗑 Kanalı sil', '⬅️ Orqaga': '⬅️ Geri', '🔗 Havolali tugma qo\'shish': '🔗 URL butonu ekle', '✅ Postni yuborish': '✅ Gönderiyi yayınla', '❌ Bekor qilish': '❌ İptal', '🔵 Ko\'k': '🔵 Mavi', '🟢 Yashil': '🟢 Yeşil', '🔴 Qizil': '🔴 Kırmızı', '📊 Statistika': '📊 İstatistik', '📣 Barchaga post yuborish': '📣 Herkese gönder', '📢 Majburiy obunani sozlash': '📢 Zorunlu abonelik', '📋 Majburiy obuna kanallar ro\'yxati': '📋 Zorunlu abonelik kanalları listesi', '❌ Majburiy obunani o\'chirish': '❌ Aboneliği kapat', '📢 Kanalga obuna bo\'lish': '📢 Kanala abone ol', '✅ Obunani tekshirish': '✅ Aboneliği kontrol et' },
-  ar: { '➕ Kanal qo\'shish': '➕ إضافة قناة', '✍️ Post yaratish': '✍️ إنشاء منشور', '🗑 Kanalni o\'chirish': '🗑 حذف القناة', '⬅️ Orqaga': '⬅️ رجوع', '🔗 Havolali tugma qo\'shish': '🔗 إضافة زر رابط', '✅ Postni yuborish': '✅ نشر المنشور', '❌ Bekor qilish': '❌ إلغاء', '🔵 Ko\'k': '🔵 أزرق', '🟢 Yashil': '🟢 أخضر', '🔴 Qizil': '🔴 أحمر', '📊 Statistika': '📊 الإحصائيات', '📣 Barchaga post yuborish': '📣 إرسال للجميع', '📢 Majburiy obunani sozlash': '📢 إعداد الاشتراك', '❌ Majburiy obunani o\'chirish': '❌ تعطيل الاشتراك', '📢 Kanalga obuna bo\'lish': '📢 اشترك بالقناة', '✅ Obunani tekshirish': '✅ تحقق من الاشتراك' },
-  zh: { '➕ Kanal qo\'shish': '➕ 添加频道', '✍️ Post yaratish': '✍️ 创建帖子', '🗑 Kanalni o\'chirish': '🗑 删除频道', '⬅️ Orqaga': '⬅️ 返回', '🔗 Havolali tugma qo\'shish': '🔗 添加链接按钮', '✅ Postni yuborish': '✅ 发布帖子', '❌ Bekor qilish': '❌ 取消', '🔵 Ko\'k': '🔵 蓝色', '🟢 Yashil': '🟢 绿色', '🔴 Qizil': '🔴 红色', '📊 Statistika': '📊 统计', '📣 Barchaga post yuborish': '📣 广播帖子', '📢 Majburiy obunani sozlash': '📢 设置强制订阅', '❌ Majburiy obunani o\'chirish': '❌ 关闭强制订阅', '📢 Kanalga obuna bo\'lish': '📢 订阅频道', '✅ Obunani tekshirish': '✅ 检查订阅' },
-  ko: { '➕ Kanal qo\'shish': '➕ 채널 추가', '✍️ Post yaratish': '✍️ 게시물 만들기', '🗑 Kanalni o\'chirish': '🗑 채널 삭제', '⬅️ Orqaga': '⬅️ 뒤로', '🔗 Havolali tugma qo\'shish': '🔗 URL 버튼 추가', '✅ Postni yuborish': '✅ 게시물 게시', '❌ Bekor qilish': '❌ 취소', '🔵 Ko\'k': '🔵 파란색', '🟢 Yashil': '🟢 초록색', '🔴 Qizil': '🔴 빨간색', '📊 Statistika': '📊 통계', '📣 Barchaga post yuborish': '📣 전체 방송', '📢 Majburiy obunani sozlash': '📢 필수 구독 설정', '❌ Majburiy obunani o\'chirish': '❌ 필수 구독 해제', '📢 Kanalga obuna bo\'lish': '📢 채널 구독', '✅ Obunani tekshirish': '✅ 구독 확인' },
-  tg: { '➕ Kanal qo\'shish': '➕ Иловаи канал', '✍️ Post yaratish': '✍️ Эҷоди пост', '🗑 Kanalni o\'chirish': '🗑 Нест кардани канал', '⬅️ Orqaga': '⬅️ Бозгашт', '🔗 Havolali tugma qo\'shish': '🔗 Иловаи тугмаи пайванд', '✅ Postni yuborish': '✅ Нашри пост', '❌ Bekor qilish': '❌ Бекор кардан', '🔵 Ko\'k': '🔵 Кабуд', '🟢 Yashil': '🟢 Сабз', '🔴 Qizil': '🔴 Сурх', '📊 Statistika': '📊 Омори', '📣 Barchaga post yuborish': '📣 Ирсол ба ҳама', '📢 Majburiy obunani sozlash': '📢 Танзими обуна', '❌ Majburiy obunani o\'chirish': '❌ Хомӯш кардани обуна', '📢 Kanalga obuna bo\'lish': '📢 Обуна ба канал', '✅ Obunani tekshirish': '✅ Санҷиши обуна' }
+  en: { 'Kanal qo\'shish': 'Add channel', 'Post yaratish': 'Create post', 'Kanalni o\'chirish': 'Remove channel', 'Orqaga': 'Back', 'Havolali tugma qo\'shish': 'Add URL button', 'Postni yuborish': 'Publish post', 'Bekor qilish': 'Cancel', 'Ko\'k': 'Blue', 'Yashil': 'Green', 'Qizil': 'Red', 'Statistika': 'Statistics', 'Barchaga post yuborish': 'Broadcast post', 'Majburiy obunani sozlash': 'Set required subscription', 'Majburiy obunani o\'chirish': 'Disable required subscription', 'Kanalga obuna bo\'lish': 'Subscribe to channel', 'Obunani tekshirish': 'Check subscription' },
+  ru: { 'Kanal qo\'shish': 'Добавить канал', 'Post yaratish': 'Создать пост', 'Kanalni o\'chirish': 'Удалить канал', 'Orqaga': 'Назад', 'Havolali tugma qo\'shish': 'Добавить URL-кнопку', 'Postni yuborish': 'Опубликовать', 'Bekor qilish': 'Отмена', 'Ko\'k': 'Синий', 'Yashil': 'Зелёный', 'Qizil': 'Красный', 'Statistika': 'Статистика', 'Barchaga post yuborish': 'Рассылка поста', 'Majburiy obunani sozlash': 'Настроить подписку', 'Majburiy obunani o\'chirish': 'Отключить подписку', 'Kanalga obuna bo\'lish': 'Подписаться', 'Obunani tekshirish': 'Проверить подписку' },
+  tr: { 'Kanal qo\'shish': 'Kanal ekle', 'Post yaratish': 'Gönderi oluştur', 'Kanalni o\'chirish': 'Kanalı sil', 'Orqaga': 'Geri', 'Havolali tugma qo\'shish': 'URL butonu ekle', 'Postni yuborish': 'Gönderiyi yayınla', 'Bekor qilish': 'İptal', 'Ko\'k': 'Mavi', 'Yashil': 'Yeşil', 'Qizil': 'Kırmızı', 'Statistika': 'İstatistik', 'Barchaga post yuborish': 'Herkese gönder', 'Majburiy obunani sozlash': 'Zorunlu abonelik', 'Majburiy obuna kanallar ro\'yxati': 'Zorunlu abonelik kanalları listesi', 'Majburiy obunani o\'chirish': 'Aboneliği kapat', 'Kanalga obuna bo\'lish': 'Kanala abone ol', 'Obunani tekshirish': 'Aboneliği kontrol et' },
+  ar: { 'Kanal qo\'shish': 'إضافة قناة', 'Post yaratish': 'إنشاء منشور', 'Kanalni o\'chirish': 'حذف القناة', 'Orqaga': 'رجوع', 'Havolali tugma qo\'shish': 'إضافة زر رابط', 'Postni yuborish': 'نشر المنشور', 'Bekor qilish': 'إلغاء', 'Ko\'k': 'أزرق', 'Yashil': 'أخضر', 'Qizil': 'أحمر', 'Statistika': 'الإحصائيات', 'Barchaga post yuborish': 'إرسال للجميع', 'Majburiy obunani sozlash': 'إعداد الاشتراك', 'Majburiy obunani o\'chirish': 'تعطيل الاشتراك', 'Kanalga obuna bo\'lish': 'اشترك بالقناة', 'Obunani tekshirish': 'تحقق من الاشتراك' },
+  zh: { 'Kanal qo\'shish': '添加频道', 'Post yaratish': '创建帖子', 'Kanalni o\'chirish': '删除频道', 'Orqaga': '返回', 'Havolali tugma qo\'shish': '添加链接按钮', 'Postni yuborish': '发布帖子', 'Bekor qilish': '取消', 'Ko\'k': '蓝色', 'Yashil': '绿色', 'Qizil': '红色', 'Statistika': '统计', 'Barchaga post yuborish': '广播帖子', 'Majburiy obunani sozlash': '设置强制订阅', 'Majburiy obunani o\'chirish': '关闭强制订阅', 'Kanalga obuna bo\'lish': '订阅频道', 'Obunani tekshirish': '检查订阅' },
+  ko: { 'Kanal qo\'shish': '채널 추가', 'Post yaratish': '게시물 만들기', 'Kanalni o\'chirish': '채널 삭제', 'Orqaga': '뒤로', 'Havolali tugma qo\'shish': 'URL 버튼 추가', 'Postni yuborish': '게시물 게시', 'Bekor qilish': '취소', 'Ko\'k': '파란색', 'Yashil': '초록색', 'Qizil': '빨간색', 'Statistika': '통계', 'Barchaga post yuborish': '전체 방송', 'Majburiy obunani sozlash': '필수 구독 설정', 'Majburiy obunani o\'chirish': '필수 구독 해제', 'Kanalga obuna bo\'lish': '채널 구독', 'Obunani tekshirish': '구독 확인' },
+  tg: { 'Kanal qo\'shish': 'Иловаи канал', 'Post yaratish': 'Эҷоди пост', 'Kanalni o\'chirish': 'Нест кардани канал', 'Orqaga': 'Бозгашт', 'Havolali tugma qo\'shish': 'Иловаи тугмаи пайванд', 'Postni yuborish': 'Нашри пост', 'Bekor qilish': 'Бекор кардан', 'Ko\'k': 'Кабуд', 'Yashil': 'Сабз', 'Qizil': 'Сурх', 'Statistika': 'Омори', 'Barchaga post yuborish': 'Ирсол ба ҳама', 'Majburiy obunani sozlash': 'Танзими обуна', 'Majburiy obunani o\'chirish': 'Хомӯш кардани обуна', 'Kanalga obuna bo\'lish': 'Обуна ба канал', 'Obunani tekshirish': 'Санҷиши обуна' }
 };
 for (const language of Object.keys(languages)) {
   keyboardTranslations[language] ||= {};
-  keyboardTranslations[language]['🛠 Admin panel'] ||= text.admin[language];
+  keyboardTranslations[language]['Admin panel'] ||= text.admin[language];
 }
 const previewLabels = {
-  uz: ['👀 Preview', '✅ Tasdiqlash'], en: ['👀 Preview', '✅ Confirm'], ru: ['👀 Предпросмотр', '✅ Подтвердить'],
-  tr: ['👀 Önizleme', '✅ Onayla'], ar: ['👀 معاينة', '✅ تأكيد'], zh: ['👀 预览', '✅ 确认'], ko: ['👀 미리보기', '✅ 확인'], tg: ['👀 Пешнамоиш', '✅ Тасдиқ']
+  uz: ['Preview', 'Tasdiqlash'], en: ['Preview', 'Confirm'], ru: ['Предпросмотр', 'Подтвердить'],
+  tr: ['Önizleme', 'Onayla'], ar: ['معاينة', 'تأكيد'], zh: ['预览', '确认'], ko: ['미리보기', '확인'], tg: ['Пешнамоиш', 'Тасдиқ']
 };
 for (const [language, labels] of Object.entries(previewLabels)) {
-  keyboardTranslations[language]['👀 Preview'] = labels[0];
-  keyboardTranslations[language]['✅ Tasdiqlash'] = labels[1];
+  keyboardTranslations[language]['Preview'] = labels[0];
+  keyboardTranslations[language]['Tasdiqlash'] = labels[1];
 }
 function localizeReply(ctx, message) {
   const lang = userLanguage(ctx);
   const translated = replyTranslations[lang]?.[message] || keyboardTranslations[lang]?.[message] || message;
-  const prefixMap = {
-    'Kanalni tanlang:': '<tg-emoji emoji-id="5424818078833715060">📣</tg-emoji>',
-    'Post uchun rasm yuboring yoki «Rasmsiz» tugmasini bosing.': '<tg-emoji emoji-id="5397916757333654639">➕</tg-emoji>'
-  };
-  const prefix = prefixMap[message] || prefixMap[translated];
-  return prefix ? `${prefix} ${translated}` : translated;
+  return translated;
 }
 data.settings.requiredChannels ||= [];
 data.settings.premiumCardNumber ||=  '9860 0803 9258 5933';
@@ -436,8 +407,8 @@ function isAdmin(ctx) {
 function mainKeyboard(ctx) {
   const keyboard = [
     [tr(ctx, 'channels'), tr(ctx, 'addChannel')],
-    ['📊 Post statistikasi'],
-    ['👤 Profilim', '💎 Premium']
+    ['Post statistikasi'],
+    ['Profilim', 'Premium']
   ];
   if (isAdmin(ctx)) keyboard.push([tr(ctx, 'admin')]);
   keyboard.push([tr(ctx, 'settings')]);
@@ -447,23 +418,23 @@ function mainKeyboard(ctx) {
 function adminKeyboard(ctx) {
   return Markup.inlineKeyboard([
     [
-      Markup.button.callback(localizeReply(ctx, '📊 Statistika'), 'admin:stats'),
-      Markup.button.callback(localizeReply(ctx, '📣 Barchaga post yuborish'), 'admin:broadcast')
+      Markup.button.callback(localizeReply(ctx, 'Statistika'), 'admin:stats'),
+      Markup.button.callback(localizeReply(ctx, 'Barchaga post yuborish'), 'admin:broadcast')
     ],
     [
-      Markup.button.callback('💳 Premium to\'lov sozlamalari', 'admin:premium_settings'),
+      Markup.button.callback('Premium to\'lov sozlamalari', 'admin:premium_settings'),
     ],
-    [Markup.button.callback(localizeReply(ctx, '📢 Majburiy obunani sozlash'), 'admin:subscription')],
-    [Markup.button.callback(localizeReply(ctx, '📋 Majburiy obuna kanallar ro\'yxati'), 'admin:required_list')],
-    [Markup.button.callback(localizeReply(ctx, '❌ Majburiy obunani o\'chirish'), 'admin:subscription_off')],
-    [Markup.button.callback('🔍 Userni qidirish', 'admin:user_search')]
+    [Markup.button.callback(localizeReply(ctx, 'Majburiy obunani sozlash'), 'admin:subscription')],
+    [Markup.button.callback(localizeReply(ctx, 'Majburiy obuna kanallar ro\'yxati'), 'admin:required_list')],
+    [Markup.button.callback(localizeReply(ctx, 'Majburiy obunani o\'chirish'), 'admin:subscription_off')],
+    [Markup.button.callback('Userni qidirish', 'admin:user_search')]
   ]);
 }
 
 function adminUserSearchResultKeyboard(personalId) {
   return Markup.inlineKeyboard([
-    [Markup.button.callback('✉️ Userga xabar yuborish', `admin:message_user:${personalId}`)],
-    [Markup.button.callback('⬅️ Orqaga', 'admin:user_search')]
+    [Markup.button.callback('Userga xabar yuborish', `admin:message_user:${personalId}`)],
+    [Markup.button.callback('Orqaga', 'admin:user_search')]
   ]);
 }
 
@@ -471,10 +442,10 @@ function subscriptionKeyboard(ctx, channels) {
   const requiredChannels = Array.isArray(channels) ? channels : [channels];
   return Markup.inlineKeyboard([
     ...requiredChannels.map((channel) => [Markup.button.url(
-      `${localizeReply(ctx, '📢 Kanalga obuna bo\'lish')} ${channel.title || channel.username}`,
+      `${localizeReply(ctx, 'Kanalga obuna bo\'lish')} ${channel.title || channel.username}`,
       `https://t.me/${channel.username.replace(/^@/, '')}`
     )]),
-    [Markup.button.callback(localizeReply(ctx, '✅ Obunani tekshirish'), 'check_subscription')]
+    [Markup.button.callback(localizeReply(ctx, 'Obunani tekshirish'), 'check_subscription')]
   ]);
 }
 
@@ -487,7 +458,7 @@ async function statsText() {
   const channels = channelResult[0]?.total || 0;
   const posts = data.stats.postsSent || 0;
   const broadcasts = data.stats.broadcastsSent || 0;
-  return { uz: `📊 Bot statistikasi\n\n👤 Barcha foydalanuvchilar: ${totalUsers}\n📢 Barcha kanallar: ${channels}\n📨 Yuborilgan postlar: ${posts}\n📣 Broadcastlar: ${broadcasts}`, en: `📊 Bot statistics\n\n👤 All users: ${totalUsers}\n📢 All channels: ${channels}\n📨 Posts sent: ${posts}\n📣 Broadcasts: ${broadcasts}`, ru: `📊 Статистика бота\n\n👤 Все пользователи: ${totalUsers}\n📢 Все каналы: ${channels}\n📨 Отправлено постов: ${posts}\n📣 Рассылки: ${broadcasts}`, tr: `📊 Bot istatistikası\n\n👤 Tüm kullanıcılar: ${totalUsers}\n📢 Tüm kanallar: ${channels}\n📨 Gönderilen gönderiler: ${posts}\n📣 Yayınlar: ${broadcasts}`, ar: `📊 إحصائيات البوت\n\n👤 جميع المستخدمين: ${totalUsers}\n📢 جميع القنوات: ${channels}\n📨 المنشورات المرسلة: ${posts}\n📣 الإرسالات: ${broadcasts}`, zh: `📊 机器人统计\n\n👤 用户总数：${totalUsers}\n📢 频道总数：${channels}\n📨 已发送帖子：${posts}\n📣 广播：${broadcasts}`, ko: `📊 봇 통계\n\n👤 전체 사용자: ${totalUsers}\n📢 전체 채널: ${channels}\n📨 보낸 게시물: ${posts}\n📣 방송: ${broadcasts}`, tg: `📊 Омори бот\n\n👤 Ҳамаи корбарон: ${totalUsers}\n📢 Ҳамаи каналҳо: ${channels}\n📨 Постҳои фиристодашуда: ${posts}\n📣 Ирсолҳо: ${broadcasts}` };
+  return { uz: `Bot statistikasi\n\nBarcha foydalanuvchilar: ${totalUsers}\nBarcha kanallar: ${channels}\nYuborilgan postlar: ${posts}\nBroadcastlar: ${broadcasts}`, en: `Bot statistics\n\nAll users: ${totalUsers}\nAll channels: ${channels}\nPosts sent: ${posts}\nBroadcasts: ${broadcasts}`, ru: `Статистика бота\n\nВсе пользователи: ${totalUsers}\nВсе каналы: ${channels}\nОтправлено постов: ${posts}\nРассылки: ${broadcasts}`, tr: `Bot istatistikası\n\nTüm kullanıcılar: ${totalUsers}\nTüm kanallar: ${channels}\nGönderilen gönderiler: ${posts}\nYayınlar: ${broadcasts}`, ar: `إحصائيات البوت\n\nجميع المستخدمين: ${totalUsers}\nجميع القنوات: ${channels}\nالمنشورات المرسلة: ${posts}\nالإرسالات: ${broadcasts}`, zh: `机器人统计\n\n用户总数：${totalUsers}\n频道总数：${channels}\n已发送帖子：${posts}\n广播：${broadcasts}`, ko: `봇 통계\n\n전체 사용자: ${totalUsers}\n전체 채널: ${channels}\n보낸 게시물: ${posts}\n방송: ${broadcasts}`, tg: `Омори бот\n\nҲамаи корбарон: ${totalUsers}\nҲамаи каналҳо: ${channels}\nПостҳои фиристодашуда: ${posts}\nИрсолҳо: ${broadcasts}` };
 }
 
 async function requiredSubscription(ctx) {
@@ -613,9 +584,9 @@ async function runWithConcurrency(items, limit, task) {
 
 function channelKeyboard(ctx, channels) {
   return Markup.inlineKeyboard([
-    ...channels.map((channel) => [Markup.button.callback(`📢 ${channel.title}`, `channel:${channel.id}`)]),
-    [Markup.button.callback('📢 Bir nechta kanalga yuborish', 'compose_multi')],
-    [Markup.button.callback(localizeReply(ctx, '➕ Kanal qo\'shish'), 'add_channel')]
+    ...channels.map((channel) => [Markup.button.callback(`${channel.title}`, `channel:${channel.id}`)]),
+    [Markup.button.callback('Bir nechta kanalga yuborish', 'compose_multi')],
+    [Markup.button.callback(localizeReply(ctx, 'Kanal qo\'shish'), 'add_channel')]
   ]);
 }
 
@@ -623,43 +594,43 @@ function multiChannelKeyboard(ctx, channels, selectedIds = []) {
   const selected = new Set(selectedIds.map((id) => String(id)));
   return Markup.inlineKeyboard([
     ...channels.map((channel) => [Markup.button.callback(
-      `${selected.has(String(channel.id)) ? '✅' : '⬜'} ${channel.title}`,
+      `${selected.has(String(channel.id)) ? '' : ''} ${channel.title}`,
       `multi_channel:${channel.id}`
     )]),
-    [Markup.button.callback('✅ Kanallarni tasdiqlash', 'multi_channels_done')],
-    [Markup.button.callback(localizeReply(ctx, '❌ Bekor qilish'), 'cancel')]
+    [Markup.button.callback('Kanallarni tasdiqlash', 'multi_channels_done')],
+    [Markup.button.callback(localizeReply(ctx, 'Bekor qilish'), 'cancel')]
   ]);
 }
 
 function channelActions(ctx, channelId) {
   return Markup.inlineKeyboard([
-    [Markup.button.callback(localizeReply(ctx, '✍️ Post yaratish'), `compose:${channelId}`)],
-    [Markup.button.callback(localizeReply(ctx, '🗑 Kanalni o\'chirish'), `remove:${channelId}`)],
-    [Markup.button.callback(localizeReply(ctx, '⬅️ Orqaga'), 'channels')]
+    [Markup.button.callback(localizeReply(ctx, 'Post yaratish'), `compose:${channelId}`)],
+    [Markup.button.callback(localizeReply(ctx, 'Kanalni o\'chirish'), `remove:${channelId}`)],
+    [Markup.button.callback(localizeReply(ctx, 'Orqaga'), 'channels')]
   ]);
 }
 
 function composerKeyboard(ctx) {
   return Markup.inlineKeyboard([
-    [Markup.button.callback(localizeReply(ctx, '🔗 Havolali tugma qo\'shish'), 'add_button')],
-    [Markup.button.callback('💾 Shablon sifatida saqlash', 'save_template')],
-    [Markup.button.callback('📂 Shablonlarim', 'templates')],
-    [Markup.button.callback(localizeReply(ctx, '👀 Preview'), 'preview')],
-    [Markup.button.callback(localizeReply(ctx, '❌ Bekor qilish'), 'cancel')]
+    [Markup.button.callback(localizeReply(ctx, 'Havolali tugma qo\'shish'), 'add_button')],
+    [Markup.button.callback('Shablon sifatida saqlash', 'save_template')],
+    [Markup.button.callback('Shablonlarim', 'templates')],
+    [Markup.button.callback(localizeReply(ctx, 'Preview'), 'preview')],
+    [Markup.button.callback(localizeReply(ctx, 'Bekor qilish'), 'cancel')]
   ]);
 }
 
 function templateKeyboard(templates) {
   return Markup.inlineKeyboard([
-    ...templates.map((template) => [Markup.button.callback(`📄 ${template.name}`, `template:${template.id}`)]),
-    [Markup.button.callback('⬅️ Postga qaytish', 'templates_back')]
+    ...templates.map((template) => [Markup.button.callback(`${template.name}`, `template:${template.id}`)]),
+    [Markup.button.callback('Postga qaytish', 'templates_back')]
   ]);
 }
 
 function confirmationKeyboard(ctx) {
   return Markup.inlineKeyboard([
-    [Markup.button.callback(localizeReply(ctx, '✅ Tasdiqlash'), 'publish')],
-    [Markup.button.callback(localizeReply(ctx, '❌ Bekor qilish'), 'cancel')]
+    [Markup.button.callback(localizeReply(ctx, 'Tasdiqlash'), 'publish')],
+    [Markup.button.callback(localizeReply(ctx, 'Bekor qilish'), 'cancel')]
   ]);
 }
 
@@ -715,7 +686,7 @@ async function sendPreview(ctx) {
   const replyMarkup = Markup.inlineKeyboard(ctx.session.previewButtons).reply_markup;
   ctx.session.step = 'confirm';
   await sendPostToChat(ctx, ctx.from.id, post, replyMarkup);
-  return ctx.reply('👀 Preview tayyor. Yuborishni tasdiqlaysizmi?', confirmationKeyboard(ctx));
+  return ctx.reply('Preview tayyor. Yuborishni tasdiqlaysizmi?', confirmationKeyboard(ctx));
 }
 
 function downloadWithYtDlp(output, url) {
@@ -750,7 +721,7 @@ function downloadWithYtDlp(output, url) {
 async function sendMediaFromUrl(ctx, url) {
   const lower = String(url).trim().toLowerCase();
   const botAddress = getBotPublicLink();
-  const footer = `\n\n📍 Bot manzili: ${botAddress}`;
+  const footer = `\n\nBot manzili: ${botAddress}`;
 
   try {
     if (/youtube\.com|youtu\.be|instagram\.com|instagr\.am|tiktok\.com|x\.com|twitter\.com|fb\.com|facebook\.com|vk\.com|vimeo\.com/.test(lower)) {
@@ -759,7 +730,7 @@ async function sendMediaFromUrl(ctx, url) {
       await downloadWithYtDlp(output, url);
       try {
         await ctx.telegram.sendVideo(ctx.chat.id, { source: fs.createReadStream(output), filename: 'media.mp4' }, { caption: footer, supports_streaming: true });
-        return ctx.reply('✅ Video yuborildi.', mainKeyboard(ctx));
+        return ctx.reply('Video yuborildi.', mainKeyboard(ctx));
       } finally {
         await fs.promises.unlink(output).catch(() => {});
       }
@@ -767,12 +738,12 @@ async function sendMediaFromUrl(ctx, url) {
 
     if (/\.(mp4|mov|m4v|webm|ogg|avi)(\?|$)/.test(lower)) {
       await ctx.telegram.sendVideo(ctx.chat.id, url, { caption: footer, supports_streaming: true });
-      return ctx.reply('✅ Video yuborildi.', mainKeyboard(ctx));
+      return ctx.reply('Video yuborildi.', mainKeyboard(ctx));
     }
 
     if (/\.(jpg|jpeg|png|gif|webp|bmp)(\?|$)/.test(lower)) {
       await ctx.telegram.sendPhoto(ctx.chat.id, url, { caption: footer });
-      return ctx.reply('✅ Rasm yuborildi.', mainKeyboard(ctx));
+      return ctx.reply('Rasm yuborildi.', mainKeyboard(ctx));
     }
 
     return ctx.reply('Iltimos, rasm yoki video URL yuboring.', mainKeyboard(ctx));
@@ -784,18 +755,18 @@ async function sendMediaFromUrl(ctx, url) {
 
 function buttonColorKeyboard(ctx) {
   return Markup.inlineKeyboard([
-    [Markup.button.callback('🔵 Ko\'k', 'button_color:blue')],
-    [Markup.button.callback('🟢 Yashil', 'button_color:green')],
-    [Markup.button.callback('🔴 Qizil', 'button_color:red')],
-    [Markup.button.callback(localizeReply(ctx, '❌ Bekor qilish'), 'cancel')]
+    [Markup.button.callback('Ko\'k', 'button_color:blue')],
+    [Markup.button.callback('Yashil', 'button_color:green')],
+    [Markup.button.callback('Qizil', 'button_color:red')],
+    [Markup.button.callback(localizeReply(ctx, 'Bekor qilish'), 'cancel')]
   ]);
 }
 
 function buttonPlacementKeyboard(ctx) {
   return Markup.inlineKeyboard([
-    [Markup.button.callback('➕ Yangi qatorga qo\'shish', 'button_place:new')],
-    [Markup.button.callback('↔️ Shu qatorga qo\'shish', 'button_place:same')],
-    [Markup.button.callback(localizeReply(ctx, '❌ Bekor qilish'), 'cancel')]
+    [Markup.button.callback('Yangi qatorga qo\'shish', 'button_place:new')],
+    [Markup.button.callback('Shu qatorga qo\'shish', 'button_place:same')],
+    [Markup.button.callback(localizeReply(ctx, 'Bekor qilish'), 'cancel')]
   ]);
 }
 
@@ -833,7 +804,7 @@ function normalizePersonalId(value) {
 }
 
 function buildUserProfileText(user, fromId) {
-  return `👤 Foydalanuvchi profili\n\n` +
+  return `Foydalanuvchi profili\n\n` +
     `Username: ${user.username || user.nickname || '—'}\n` +
     `Nickname: ${user.nickname || '—'}\n` +
     `Bot personal ID: ${user.personalId || '—'}\n` +
@@ -868,7 +839,7 @@ function buildProfileText(ctx) {
   const account = userData(ctx.from.id);
   const lang = userLanguage(ctx);
   const premiumText = Boolean(account.premium) ? `${text.premiumActive?.[lang] || 'Active'} ${text.premium?.[lang] || 'Premium'}` : `${text.premiumInactive?.[lang] || 'Inactive'} ${text.premium?.[lang] || 'Premium'}`;
-  return `👤 ${text.profile?.[lang] || 'Profilim'}\n\n` +
+  return `${text.profile?.[lang] || 'Profilim'}\n\n` +
     `${text.botId?.[lang] || 'Botdagi ID'}: ${account.personalId}\n` +
     `${text.telegramId?.[lang] || 'Telegram ID'}: ${ctx.from.id}\n` +
     `${text.username?.[lang] || 'Username'}: ${ctx.from.username || '—'}\n` +
@@ -886,7 +857,7 @@ async function handleStart(ctx) {
   reset(ctx);
   if (!(await requiredSubscription(ctx))) return;
   if (!account.language) return ctx.reply(tr(ctx, 'welcome'), languageKeyboard());
-  return ctx.reply('<tg-emoji emoji-id="5454380420336466255">✋</tg-emoji> Assalomu alaykum! Kanal postlarini boshqarish botiga xush kelibsiz.', {
+  return ctx.reply('Assalomu alaykum! Kanal postlarini boshqarish botiga xush kelibsiz.', {
     parse_mode: 'HTML',
     reply_markup: mainKeyboard(ctx)
   });
@@ -896,7 +867,7 @@ async function sendAdminMessage(ctx, messageText) {
   try {
     const chat = await bot.telegram.getChat(ADMIN_PUBLIC_USERNAME);
     const account = userData(ctx.from.id);
-    return bot.telegram.sendMessage(chat.id, `📬 Adminga murojaat\n\n` +
+    return bot.telegram.sendMessage(chat.id, `Adminga murojaat\n\n` +
       `Foydalanuvchi: ${ctx.from.username || ctx.from.first_name || ctx.from.id}\n` +
       `Bot personal ID: ${account.personalId || '—'}\n` +
       `Telegram ID: ${ctx.from.id}\n\n` +
@@ -920,7 +891,7 @@ async function chargeForPostIfNeeded(ctx) {
   const recentLog = Array.isArray(account.postLog) ? account.postLog.filter((ts) => Number(ts) >= windowStart) : [];
   account.postLog = recentLog;
   if (recentLog.length >= 3) {
-    return { ok: false, message: `<tg-emoji emoji-id="5084974483685507801">💜</tg-emoji> ${tr(ctx, 'Limit tugadi. Premium ta`rifni sotib oling!')}` };
+    return { ok: false, message: `${tr(ctx, 'Limit tugadi. Premium ta`rifni sotib oling!')}` };
   }
 
   account.postLog.push(now);
@@ -938,23 +909,23 @@ function buildPremiumText(ctx) {
     : `${text.premiumInactive?.[lang] || 'Inactive'} ${text.premium?.[lang] || 'Premium'}`;
   const cardNumber = String(data.settings?.premiumCardNumber || '9860 0803 9258 5933').trim();
   const price = Number(data.settings?.premiumPrice || 10000);
-  return `<tg-emoji emoji-id="5084974483685507801">💜</tg-emoji>  ${text.premium?.[lang] || 'Premium'}\n\n` +
-    `<tg-emoji emoji-id="5370784581341422520">⭐️</tg-emoji> ${text.premiumStatus?.[lang] || 'Premium status'}: ${status}\n` +
-    `<tg-emoji emoji-id="5366082700253870225">♾️</tg-emoji> ${text.premiumFeaturePost?.[lang] || 'Unlimited posts'}\n` +
-    `<tg-emoji emoji-id="5366082700253870225">♾️</tg-emoji> ${text.premiumFeatureChannel?.[lang] || 'Unlimited channels'}\n\n` +
-    `📢 Bir postni bir nechta kanalga yuborish\n` +
-    `📂 Post shablonlarini saqlash\n` +
-    `🔘 Tugmalarni bir qatorga joylash\n` +
-    `📊 Post statistikasi\n` +
-    `🎞 Video, GIF va hujjat postlari\n\n` +
-    `<tg-emoji emoji-id="5267300544094948794">💳</tg-emoji> To'lov kartasi: <code>${cardNumber}</code>\n` +
-    `<tg-emoji emoji-id="5393290141253004429">🏧</tg-emoji> Humo plastik karta, ${price} so'm\n\n` +
-    `<tg-emoji emoji-id="5373265917092316632">📱</tg-emoji> To'lovni amalga oshirgandan keyin quyidagi tugmani bosing:`;
+  return `${text.premium?.[lang] || 'Premium'}\n\n` +
+    `${text.premiumStatus?.[lang] || 'Premium status'}: ${status}\n` +
+    `${text.premiumFeaturePost?.[lang] || 'Unlimited posts'}\n` +
+    `${text.premiumFeatureChannel?.[lang] || 'Unlimited channels'}\n\n` +
+    `Bir postni bir nechta kanalga yuborish\n` +
+    `Post shablonlarini saqlash\n` +
+    `Tugmalarni bir qatorga joylash\n` +
+    `Post statistikasi\n` +
+    `Video, GIF va hujjat postlari\n\n` +
+    `To'lov kartasi: <code>${cardNumber}</code>\n` +
+    `Humo plastik karta, ${price} so'm\n\n` +
+    `To'lovni amalga oshirgandan keyin quyidagi tugmani bosing:`;
 }
 
 function premiumInlineKeyboard() {
   return Markup.inlineKeyboard([
-    [Markup.button.callback("To'lov qildim ✅", 'premium_paid')]
+    [Markup.button.callback("To'lov qildim ", 'premium_paid')]
   ]);
 }
 
@@ -964,7 +935,7 @@ function premiumStatsText(ctx) {
   const lastPublished = account.lastPublishedAt
     ? new Date(account.lastPublishedAt).toLocaleString('uz-UZ', { timeZone: BOT_TIMEZONE })
     : 'Hali post yuborilmagan';
-  return `📊 Post statistikasi\n\n` +
+  return `Post statistikasi\n\n` +
     `Yuborilgan postlar: ${account.publishedPosts || 0} ta\n` +
     `Kanallarga yuborilgan nusxalar: ${account.publishedChannels || 0} ta\n` +
     `Saqlangan shablonlar: ${account.templates?.length || 0} ta\n` +
@@ -1005,7 +976,7 @@ async function checkFullAdmin(ctx, username) {
 async function showChannels(ctx) {
   const channels = userData(ctx.from.id).channels;
   if (!channels.length) {
-    return ctx.reply('Sizda hali kanal yo\'q. Kanal username sini yuborish uchun «➕ Kanal qo\'shish» tugmasini bosing.', mainKeyboard(ctx));
+    return ctx.reply('Sizda hali kanal yo\'q. Kanal username sini yuborish uchun «Kanal qo\'shish» tugmasini bosing.', mainKeyboard(ctx));
   }
   return ctx.reply('Kanalni tanlang:', channelKeyboard(ctx, channels));
 }
@@ -1027,18 +998,7 @@ bot.use(async (ctx, next) => {
   }
 
   const originalReply = ctx.reply.bind(ctx);
-  ctx.reply = (message, ...args) => {
-    const localized = localizeReply(ctx, message);
-      const enriched = prefixPremiumEmojiIfMissing(localized);
-    if (enriched.includes('<tg-emoji')) {
-      if (args.length === 0) return originalReply(enriched, { parse_mode: 'HTML' });
-      const firstArg = args[0];
-      if (firstArg && typeof firstArg === 'object' && !Array.isArray(firstArg)) {
-        return originalReply(enriched, { ...firstArg, parse_mode: 'HTML' });
-      }
-    }
-    return originalReply(enriched, ...args);
-  };
+  ctx.reply = (message, ...args) => originalReply(localizeReply(ctx, message), ...args);
   const callbackData = ctx.callbackQuery?.data;
   const isSettings = ctx.message?.text === '/settings';
   if (isStart || isSettings || callbackData?.startsWith('language:') || callbackData === 'check_subscription' || isAdmin(ctx)) return next();
@@ -1062,7 +1022,10 @@ bot.action(/^language:(uz|en|ru|ar|tr|zh|ko|tg)$/, async (ctx) => {
 
 bot.command('settings', (ctx) => ctx.reply(tr(ctx, 'welcome'), languageKeyboard()));
 bot.command('profile', (ctx) => ctx.reply(buildProfileText(ctx), mainKeyboard(ctx)));
-bot.command('premium', (ctx) => ctx.reply(buildPremiumText(ctx), premiumInlineKeyboard()));
+bot.command('premium', (ctx) => ctx.reply(buildPremiumText(ctx), {
+  ...premiumInlineKeyboard(),
+  parse_mode: 'HTML'
+}));
 
 bot.action('premium:stats', async (ctx) => {
   await ctx.answerCbQuery();
@@ -1086,27 +1049,30 @@ bot.hears(Object.values(text.addChannel), (ctx) => {
 
 bot.hears(Object.values(text.settings), (ctx) => ctx.reply(tr(ctx, 'welcome'), languageKeyboard()));
 
-bot.hears('👤 Profilim', (ctx) => {
+bot.hears('Profilim', (ctx) => {
   return ctx.reply(buildProfileText(ctx), mainKeyboard(ctx));
 });
 
-bot.hears('💎 Premium', (ctx) => {
-  return ctx.reply(buildPremiumText(ctx), premiumInlineKeyboard());
+bot.hears('Premium', (ctx) => {
+  return ctx.reply(buildPremiumText(ctx), {
+    ...premiumInlineKeyboard(),
+    parse_mode: 'HTML'
+  });
 });
 
-bot.hears('📊 Post statistikasi', (ctx) => {
+bot.hears('Post statistikasi', (ctx) => {
   return ctx.reply(premiumStatsText(ctx), mainKeyboard(ctx));
 });
 
 bot.hears(Object.values(text.admin), (ctx) => {
   if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
-  return ctx.reply('🛠 Admin panel', adminKeyboard(ctx));
+  return ctx.reply('Admin panel', adminKeyboard(ctx));
 });
 
 bot.action('check_subscription', async (ctx) => {
   await ctx.answerCbQuery();
   if (await requiredSubscription(ctx)) {
-    return ctx.reply('✅ Obuna tasdiqlandi. Botdan foydalanishingiz mumkin.', mainKeyboard(ctx));
+    return ctx.reply('Obuna tasdiqlandi. Botdan foydalanishingiz mumkin.', mainKeyboard(ctx));
   }
 });
 
@@ -1132,10 +1098,10 @@ bot.action('premium_paid', async (ctx) => {
   await ctx.answerCbQuery();
   const account = userData(ctx.from.id);
   if (account.premium) {
-    return ctx.reply('<tg-emoji emoji-id="5393318303353563978">⚡️</tg-emoji> Siz allaqachon premium tarifga egasiz.', mainKeyboard(ctx));
+    return ctx.reply('Siz allaqachon premium tarifga egasiz.', mainKeyboard(ctx));
   }
   ctx.session = { step: 'premium_payment_photo', buyer: ctx.from.id };
-  return ctx.reply(`<tg-emoji emoji-id="5422679296789455210">🇺🇿</tg-emoji> To\'lov chekingizni (rasm) yuboring. Admin tekshiruv uchun yetib keladi.`, mainKeyboard(ctx));
+  return ctx.reply(`To\'lov chekingizni (rasm) yuboring. Admin tekshiruv uchun yetib keladi.`, mainKeyboard(ctx));
 });
 
 bot.action(/^admin:premium_approve:(\d+)$/, async (ctx) => {
@@ -1148,7 +1114,7 @@ bot.action(/^admin:premium_approve:(\d+)$/, async (ctx) => {
   saveData();
 
   try {
-    await bot.telegram.sendMessage(userId, `<tg-emoji emoji-id="5393318303353563978">⚡️</tg-emoji> Premium tarif tasdiqlandi. Endi premium imkoniyatlardan foydalanishingiz mumkin.`, {
+    await bot.telegram.sendMessage(userId, `Premium tarif tasdiqlandi. Endi premium imkoniyatlardan foydalanishingiz mumkin.`, {
       parse_mode: 'HTML',
       reply_markup: mainKeyboard(ctx).reply_markup
     });
@@ -1157,7 +1123,7 @@ bot.action(/^admin:premium_approve:(\d+)$/, async (ctx) => {
   }
 
   try {
-    await bot.telegram.sendMessage(ADMIN_TG_ID, `<tg-emoji emoji-id="5415726114104418638">🔵</tg-emoji> Premium so\'rovi tasdiqlandi. Foydalanuvchi ID: ${userId}`, {
+    await bot.telegram.sendMessage(ADMIN_TG_ID, `Premium so\'rovi tasdiqlandi. Foydalanuvchi ID: ${userId}`, {
       parse_mode: 'HTML',
       reply_markup: adminKeyboard(ctx).reply_markup
     });
@@ -1165,7 +1131,7 @@ bot.action(/^admin:premium_approve:(\d+)$/, async (ctx) => {
     console.error('Premium approve admin notification failed:', error?.response?.description || error.message);
   }
 
-  return ctx.reply('<tg-emoji emoji-id="5393318303353563978">⚡️</tg-emoji> Premium tarif tasdiqlandi.', adminKeyboard(ctx));
+  return ctx.reply('Premium tarif tasdiqlandi.', adminKeyboard(ctx));
 });
 
 bot.action(/^admin:premium_reject:(\d+)$/, async (ctx) => {
@@ -1178,7 +1144,7 @@ bot.action(/^admin:premium_reject:(\d+)$/, async (ctx) => {
   saveData();
 
   try {
-    await bot.telegram.sendMessage(userId, `<tg-emoji emoji-id="5415726114104418638">🔵</tg-emoji> Premium so\'rovi rad etildi. Tekshiruvda muammo mavjud.`, {
+    await bot.telegram.sendMessage(userId, `Premium so\'rovi rad etildi. Tekshiruvda muammo mavjud.`, {
       parse_mode: 'HTML',
       reply_markup: mainKeyboard(ctx).reply_markup
     });
@@ -1187,7 +1153,7 @@ bot.action(/^admin:premium_reject:(\d+)$/, async (ctx) => {
   }
 
   try {
-    await bot.telegram.sendMessage(ADMIN_TG_ID, `<tg-emoji emoji-id="5415726114104418638">🔵</tg-emoji> Premium so\'rovi rad etildi. Foydalanuvchi ID: ${userId}`, {
+    await bot.telegram.sendMessage(ADMIN_TG_ID, `Premium so\'rovi rad etildi. Foydalanuvchi ID: ${userId}`, {
       parse_mode: 'HTML',
       reply_markup: adminKeyboard(ctx).reply_markup
     });
@@ -1195,7 +1161,7 @@ bot.action(/^admin:premium_reject:(\d+)$/, async (ctx) => {
     console.error('Premium reject admin notification failed:', error?.response?.description || error.message);
   }
 
-  return ctx.reply('<tg-emoji emoji-id="5415726114104418638">🔵</tg-emoji> Premium so\'rovi rad etildi.', adminKeyboard(ctx));
+  return ctx.reply('Premium so\'rovi rad etildi.', adminKeyboard(ctx));
 });
 
 bot.action('admin:stats', async (ctx) => {
@@ -1229,17 +1195,17 @@ bot.action('admin:subscription_off', async (ctx) => {
     { upsert: true, new: true }
   );
   saveData();
-  return ctx.reply('✅ Majburiy obuna o\'chirildi.', adminKeyboard(ctx));
+  return ctx.reply('Majburiy obuna o\'chirildi.', adminKeyboard(ctx));
 });
 
 bot.action('admin:premium_settings', async (ctx) => {
   await ctx.answerCbQuery();
   if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
   ctx.session = { step: 'admin_premium_settings_menu' };
-  return ctx.reply('💳 Premium to\'lov kartasi va narxini tanlang:', Markup.inlineKeyboard([
-    [Markup.button.callback('🪪 Karta raqamini o\'zgartirish', 'admin:premium_card_edit')],
-    [Markup.button.callback('💵 Premium narxini o\'zgartirish', 'admin:premium_price_edit')],
-    [Markup.button.callback('⬅️ Orqaga', 'admin:back')]
+  return ctx.reply('Premium to\'lov kartasi va narxini tanlang:', Markup.inlineKeyboard([
+    [Markup.button.callback('Karta raqamini o\'zgartirish', 'admin:premium_card_edit')],
+    [Markup.button.callback('Premium narxini o\'zgartirish', 'admin:premium_price_edit')],
+    [Markup.button.callback('Orqaga', 'admin:back')]
   ]));
 });
 
@@ -1261,7 +1227,7 @@ bot.action('admin:back', async (ctx) => {
   await ctx.answerCbQuery();
   if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
   reset(ctx);
-  return ctx.reply('🛠 Admin panel', adminKeyboard(ctx));
+  return ctx.reply('Admin panel', adminKeyboard(ctx));
 });
 
 bot.action('admin:broadcast', async (ctx) => {
@@ -1390,7 +1356,7 @@ bot.on('photo', async (ctx) => {
     const photoFileId = ctx.message.photo.at(-1).file_id;
     const requester = ctx.from;
     const user = userData(requester.id);
-    const cardText = `<tg-emoji emoji-id="5415726114104418638">🔵</tg-emoji> Premium so'rovi\n\n` +
+    const cardText = `Premium so'rovi\n\n` +
       `Foydalanuvchi: ${requester.username || requester.first_name || requester.id}\n` +
       `Telegram ID: ${requester.id}\n` +
       `Bot personal ID: ${user.personalId || '—'}\n\n` +
@@ -1399,12 +1365,12 @@ bot.on('photo', async (ctx) => {
       caption: cardText,
       parse_mode: 'HTML',
       reply_markup: Markup.inlineKeyboard([
-        [Markup.button.callback('✅ Premium berish', `admin:premium_approve:${requester.id}`)],
-        [Markup.button.callback('❌ Premium bermaslik', `admin:premium_reject:${requester.id}`)]
+        [Markup.button.callback('Premium berish', `admin:premium_approve:${requester.id}`)],
+        [Markup.button.callback('Premium bermaslik', `admin:premium_reject:${requester.id}`)]
       ]).reply_markup
     });
     reset(ctx);
-    return ctx.reply(`<tg-emoji emoji-id="5321210956414459578">✔️</tg-emoji> To\'lov chekingiz adminga yuborildi. Tasdiq kutilmoqda.`, mainKeyboard(ctx));
+    return ctx.reply(`To\'lov chekingiz adminga yuborildi. Tasdiq kutilmoqda.`, mainKeyboard(ctx));
   }
 
   const message = ctx.message;
@@ -1454,7 +1420,7 @@ bot.action('save_template', async (ctx) => {
   });
   account.templates = account.templates.slice(-20);
   saveData();
-  return ctx.reply('✅ Post shablon sifatida saqlandi', composerKeyboard(ctx));
+  return ctx.reply('Post shablon sifatida saqlandi', composerKeyboard(ctx));
 });
 
 bot.action('templates', async (ctx) => {
@@ -1530,7 +1496,7 @@ bot.action('publish', async (ctx) => {
     if (!postHasContent(post)) return ctx.reply('Broadcast mazmuni topilmadi.');
     const sent = await broadcastPost(ctx, { ...post, finalButtons: ctx.session.previewButtons });
     reset(ctx);
-    return ctx.reply(`✅ Broadcast ${sent} ta chatga yuborildi.`, mainKeyboard(ctx));
+    return ctx.reply(`Broadcast ${sent} ta chatga yuborildi.`, mainKeyboard(ctx));
   }
   const channels = selectedChannels?.length ? selectedChannels : selectedChannel ? [selectedChannel] : [];
   if (!channels.length || !postHasContent(post)) return ctx.reply('Post ma\'lumotlari topilmadi.');
@@ -1548,7 +1514,7 @@ bot.action('publish', async (ctx) => {
     console.error('Post send failed:', result.reason?.response?.description || result.reason?.message);
   }
   if (!sentChannels.length) {
-    return ctx.reply('❌ Postni hech qaysi kanalga yuborib bo\'lmadi. Kanal ruxsatlarini tekshiring.', mainKeyboard(ctx));
+    return ctx.reply('Postni hech qaysi kanalga yuborib bo\'lmadi. Kanal ruxsatlarini tekshiring.', mainKeyboard(ctx));
   }
   const account = userData(ctx.from.id);
   const publishedAt = new Date();
@@ -1571,13 +1537,13 @@ bot.action('publish', async (ctx) => {
   data.stats.postsSent += sentChannels.length;
   await saveData();
   reset(ctx);
-  return ctx.reply(`✅ Post ${sentChannels.length} ta kanalga muvaffaqiyatli yuborildi.`, mainKeyboard(ctx));
+  return ctx.reply(`Post ${sentChannels.length} ta kanalga muvaffaqiyatli yuborildi.`, mainKeyboard(ctx));
 });
 
 bot.action('cancel', async (ctx) => {
   await ctx.answerCbQuery();
   reset(ctx);
-  return ctx.reply(`${CANCEL_EMOJI_TAG} Amal bekor qilindi`, mainKeyboard(ctx));
+  return ctx.reply('Amal bekor qilindi', mainKeyboard(ctx));
 });
 
 bot.on('text', async (ctx) => {
@@ -1595,24 +1561,24 @@ bot.on('text', async (ctx) => {
     if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
     const cardNumber = trimmedText.replace(/\s+/g, ' ').trim();
     if (!/^\d{4}(\s\d{4}){3}$/.test(cardNumber)) {
-      return ctx.reply('❌ Karta raqami noto\'g\'ri formatda. Masalan: 9860 0803 9258 5933', adminKeyboard(ctx));
+      return ctx.reply('Karta raqami noto\'g\'ri formatda. Masalan: 9860 0803 9258 5933', adminKeyboard(ctx));
     }
     data.settings.premiumCardNumber = cardNumber;
     saveData();
     reset(ctx);
-    return ctx.reply(`✅ Premium karta raqami yangilandi: ${cardNumber}`, adminKeyboard(ctx));
+    return ctx.reply(`Premium karta raqami yangilandi: ${cardNumber}`, adminKeyboard(ctx));
   }
 
   if (sessionState.step === 'admin_premium_price_edit') {
     if (!isAdmin(ctx)) return ctx.reply('Ruxsat yo\'q.');
     const price = Number(trimmedText.replace(/\D/g, ''));
     if (!Number.isFinite(price) || price <= 0) {
-      return ctx.reply('❌ Premium narxini faqat musbat son ko\'rinishida kiriting.', adminKeyboard(ctx));
+      return ctx.reply('Premium narxini faqat musbat son ko\'rinishida kiriting.', adminKeyboard(ctx));
     }
     data.settings.premiumPrice = price;
     saveData();
     reset(ctx);
-    return ctx.reply(`✅ Premium narxi yangilandi: ${price} so'm`, adminKeyboard(ctx));
+    return ctx.reply(`Premium narxi yangilandi: ${price} so'm`, adminKeyboard(ctx));
   }
 
   if (sessionState.step === 'required_subscription_channel') {
@@ -1631,9 +1597,9 @@ bot.on('text', async (ctx) => {
       );
       saveData();
       reset(ctx);
-      return ctx.reply(`✅ ${channel.title} majburiy obuna kanali qilib sozlandi.`, adminKeyboard(ctx));
+      return ctx.reply(`${channel.title} majburiy obuna kanali qilib sozlandi.`, adminKeyboard(ctx));
     } catch (error) {
-      return ctx.reply(`❌ ${error.message}`);
+      return ctx.reply(`${error.message}`);
     }
   }
 
@@ -1642,14 +1608,14 @@ bot.on('text', async (ctx) => {
       const channel = await checkFullAdmin(ctx, normalizeChannel(trimmedText));
       const account = userData(ctx.from.id);
       if (!account.premium && account.channels.length >= 1) {
-        return ctx.reply(`<tg-emoji emoji-id="5084974483685507801">💜</tg-emoji> ${tr(ctx, 'Limit tugadi. Premium ta`rifni sotib oling!')}`, { parse_mode: 'HTML', reply_markup: mainKeyboard(ctx) });
+        return ctx.reply(`${tr(ctx, 'Limit tugadi. Premium ta`rifni sotib oling!')}`, { parse_mode: 'HTML', reply_markup: mainKeyboard(ctx) });
       }
       if (!account.channels.some((item) => item.id === channel.id)) account.channels.push(channel);
       saveData();
       reset(ctx);
-      return ctx.reply(`✅ ${channel.title} kanal ro\'yxatingizga qo\'shildi.`, mainKeyboard(ctx));
+      return ctx.reply(`${channel.title} kanal ro\'yxatingizga qo\'shildi.`, mainKeyboard(ctx));
     } catch (error) {
-      return ctx.reply(`❌ ${error.message}\n\nUsername ni to\'g\'ri yuboring va botga barcha admin huquqlarini bering.`);
+      return ctx.reply(`${error.message}\n\nUsername ni to\'g\'ri yuboring va botga barcha admin huquqlarini bering.`);
     }
   }
 
@@ -1686,7 +1652,7 @@ bot.on('text', async (ctx) => {
     const found = await findUserByPersonalId(target);
     if (!found) return ctx.reply('Bunday foydalanuvchi topilmadi.', adminKeyboard(ctx));
     const account = found.account;
-    const detail = `👤 User ma\'lumotlari\n\n` +
+    const detail = `User ma\'lumotlari\n\n` +
       `Username: ${account.username || '—'}\n` +
       `Nickname: ${account.nickname || '—'}\n` +
       `Bot personal ID: ${account.personalId || '—'}\n` +
@@ -1706,11 +1672,11 @@ bot.on('text', async (ctx) => {
         entities: Array.isArray(ctx.message.entities) ? ctx.message.entities : undefined
       });
       reset(ctx);
-      return ctx.reply('✅ Xabar foydalanuvchiga yuborildi.', adminKeyboard(ctx));
+      return ctx.reply('Xabar foydalanuvchiga yuborildi.', adminKeyboard(ctx));
     } catch (error) {
       console.error('Admin user direct message failed:', error.response?.description || error.message);
       reset(ctx);
-      return ctx.reply('❌ Xabar yuborishda xatolik yuz berdi. Foydalanuvchi botga start bosgan yoki chatni ochgan bo\'lishi kerak.', adminKeyboard(ctx));
+      return ctx.reply('Xabar yuborishda xatolik yuz berdi. Foydalanuvchi botga start bosgan yoki chatni ochgan bo\'lishi kerak.', adminKeyboard(ctx));
     }
   }
 
@@ -1727,16 +1693,108 @@ bot.catch((error, ctx) => {
 
 async function setupBotAbout() {
   try {
-    const aboutText = `🇺🇿 Kanallar uchun tugmali postlar yaratish boti. <tg-emoji emoji-id="50849744836855078101">💜</tg-emoji>\n🇷🇺 Бот для создания постов с кнопками для каналов. <tg-emoji emoji-id="5285430309720966085">🔥</tg-emoji>\nAdmin: @admn28`;
+    const aboutText = `Kanallar uchun tugmali postlar yaratish boti.\nБот для создания постов с кнопками для каналов.\nAdmin: @admn28`;
     await bot.telegram.setMyShortDescription(aboutText);
-    console.log("🚀 Botning 'About' qismi premium emojilar bilan muvaffaqiyatli yangilandi!");
+    console.log("Botning 'About' qismi muvaffaqiyatli yangilandi!");
   } catch (error) {
-    console.error("❌ About qismini yangilashda xatolik yuz berdi:", error.message);
+    console.error("About qismini yangilashda xatolik yuz berdi:", error.message);
   }
+}
+
+let pollingLeaseTimer;
+let leaseRenewalRunning = false;
+let shutdownRequested = false;
+
+async function acquirePollingLease() {
+  await BotConfig.init();
+  let waitingForLease = false;
+
+  while (!shutdownRequested) {
+    const now = new Date();
+    try {
+      const lease = await BotConfig.findOneAndUpdate({
+        configKey: BOT_POLLING_LEASE_KEY,
+        $or: [
+          { leaseExpiresAt: { $lte: now } },
+          { leaseOwner: botInstanceId }
+        ]
+      }, {
+        $set: {
+          leaseOwner: botInstanceId,
+          leaseExpiresAt: new Date(now.getTime() + BOT_POLLING_LEASE_MS)
+        }
+      }, {
+        upsert: true,
+        new: true
+      }).lean();
+
+      if (lease?.leaseOwner === botInstanceId) {
+        console.log('Telegram polling lease olindi.');
+        return;
+      }
+    } catch (error) {
+      if (error.code !== 11000) throw error;
+    }
+
+    if (!waitingForLease) {
+      console.log('Bot boshqa server nusxasida ishlayapti. Polling uchun navbat kutilmoqda.');
+      waitingForLease = true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+  }
+
+  throw new Error('Bot polling lease olinmasdan ishga tushirish to\'xtatildi.');
+}
+
+function renewPollingLease() {
+  pollingLeaseTimer = setInterval(async () => {
+    if (leaseRenewalRunning) return;
+    leaseRenewalRunning = true;
+    try {
+      const result = await BotConfig.updateOne({
+        configKey: BOT_POLLING_LEASE_KEY,
+        leaseOwner: botInstanceId
+      }, {
+        $set: { leaseExpiresAt: new Date(Date.now() + BOT_POLLING_LEASE_MS) }
+      });
+      if (result.matchedCount !== 1) {
+        throw new Error('Bot polling lease boshqa server nusxasiga o\'tdi.');
+      }
+    } catch (error) {
+      console.error('Bot polling lease yangilanmadi; bot to\'xtatilmoqda:', error);
+      clearInterval(pollingLeaseTimer);
+      bot.stop('POLLING_LEASE_LOST');
+      process.exit(1);
+    } finally {
+      leaseRenewalRunning = false;
+    }
+  }, BOT_POLLING_RENEW_INTERVAL_MS);
+}
+
+async function shutdown(signal) {
+  shutdownRequested = true;
+  clearInterval(pollingLeaseTimer);
+  bot.stop(signal);
+  server.close();
+
+  try {
+    await BotConfig.updateOne({
+      configKey: BOT_POLLING_LEASE_KEY,
+      leaseOwner: botInstanceId
+    }, {
+      $set: { leaseExpiresAt: new Date(0) }
+    });
+  } catch (error) {
+    console.error('Bot polling lease bo\'shatilmadi:', error);
+  }
+
+  await mongoose.disconnect();
 }
 
 async function startBot() {
   await hydrateFromMongo();
+  await acquirePollingLease();
+  renewPollingLease();
   await bot.launch();
   try {
     console.log('Bot ishga tushdi.');
@@ -1749,13 +1807,16 @@ async function startBot() {
 startBot().catch((error) => {
   console.error('Bot startup failed:', error);
   process.exitCode = 1;
+  shutdown('STARTUP_FAILED').catch((shutdownError) => {
+    console.error('Bot startup cleanup failed:', shutdownError);
+  });
 });
 
-process.once('SIGINT', async () => {
-  bot.stop('SIGINT');
-  await mongoose.disconnect();
-});
-process.once('SIGTERM', async () => {
-  bot.stop('SIGTERM');
-  await mongoose.disconnect();
-});
+process.once('SIGINT', () => shutdown('SIGINT').catch((error) => {
+  console.error('Bot shutdown failed:', error);
+  process.exitCode = 1;
+}));
+process.once('SIGTERM', () => shutdown('SIGTERM').catch((error) => {
+  console.error('Bot shutdown failed:', error);
+  process.exitCode = 1;
+}));
